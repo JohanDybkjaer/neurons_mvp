@@ -1,8 +1,9 @@
-# Visual Recommendations - Minimal MVP Plan
+# Visual Recommendations - Minimal Viable Solution Plan
 
 `DESIGN.md` is the source of truth for scope and architecture. This plan
-delivers that design in three reviewable branches. It intentionally avoids a
-branch per layer or infrastructure concern.
+delivers that design in three reviewable branches. It uses proportionate best
+practices while intentionally avoiding a branch per layer, speculative
+abstractions, or unnecessary infrastructure.
 
 ## Branch workflow
 
@@ -11,6 +12,10 @@ branch per layer or infrastructure concern.
 - Keep implementation, tests, and directly affected documentation together.
 - Merge a branch only after its checks pass.
 - Update `DESIGN.md` before implementing a materially different design.
+- Keep dependency and tool configuration in `pyproject.toml` and commit every
+  intentional `uv.lock` change.
+- Once a quality tool is introduced, run it on every subsequent branch; do not
+  postpone new violations to the final step.
 
 ## Progress
 
@@ -29,10 +34,14 @@ nondeterministic model calls.
 
 - Create the minimal Python project with FastAPI, Pydantic, Pillow, Uvicorn,
   python-multipart, pytest, and HTTP test dependencies managed by `uv`.
-- Keep application code to the five modules described in `DESIGN.md` unless
+- Keep application code to the five concerns described in `DESIGN.md` unless
   a concrete implementation need proves otherwise.
-- Define validated application configuration for the runtime root, image upload
-  limit, and provider timeout.
+- Define a small configuration package with validated settings for the runtime
+  root, image upload limit, and provider timeout.
+- Use `create_app` as the composition root and inject configuration and the
+  image service directly, without a dependency-injection framework.
+- Keep FastAPI types at the HTTP boundary and provider-specific details out of
+  the workflow.
 - Define the recommendation, brand-guideline, task, result, and structured
   evaluation models.
 - Implement:
@@ -66,6 +75,8 @@ nondeterministic model calls.
 - Invalid JSON, invalid images, and mismatched filenames are rejected safely.
 - Provider exceptions produce a safe failed-task response.
 - The test suite runs without network access or credentials.
+- Configuration tests inject immutable settings directly; application code does
+  not read environment variables outside the configuration package.
 
 ## Step 2 - `mvp/openai-integration`
 
@@ -80,7 +91,11 @@ preserving the already-tested workflow.
   - Edit an original creative from its recommendations and brand guidelines.
   - Evaluate the original and variant using a schema-constrained vision
     response.
-- Configure only `OPENAI_API_KEY`, `IMAGE_MODEL`, and `EVALUATION_MODEL`.
+- Extend the configuration package to load and validate only `OPENAI_API_KEY`,
+  `IMAGE_MODEL`, and `EVALUATION_MODEL`; keep environment reads out of route,
+  workflow, and provider methods.
+- Construct one asynchronous OpenAI client for the application and close it via
+  the FastAPI lifespan.
 - Build a direct editing prompt without adding a planning stage.
 - Make brand guidelines authoritative in initial and repair prompts.
 - Send all recommendations and brand criteria in a single evaluator request.
@@ -103,6 +118,9 @@ preserving the already-tested workflow.
 - One failed first evaluation adds no more than one call of each kind.
 - The real smoke test is skipped unless explicitly enabled and credentials are
   present.
+- Invalid or missing required configuration fails at startup without exposing a
+  secret, and tests can still supply settings without environment mutation.
+- Application shutdown closes the OpenAI client.
 
 ## Step 3 - `mvp/container-and-demo`
 
@@ -112,9 +130,14 @@ Make the small service easy to run, inspect, and discuss in the interview.
 
 ### Deliverables
 
-- Add a Dockerfile that runs one Uvicorn worker.
+- Add a Dockerfile based on a small pinned Python image that installs from
+  `uv.lock`, runs as a non-root user, and starts one Uvicorn worker.
 - Add `.dockerignore`, `.gitignore`, and `.env.example` entries needed by the
   MVP.
+- Configure Ruff formatting/linting and mypy for application code in
+  `pyproject.toml`; keep the rule set small and document any necessary exclusion.
+- Add one minimal CI workflow that performs a frozen dependency install and
+  runs Ruff, mypy, and the default pytest suite.
 - Include the supplied creatives and JSON files unchanged as demo inputs.
 - Add standard-library logging for task ID, image ID, step, attempt, duration,
   and outcome without logging sensitive payloads.
@@ -137,7 +160,9 @@ Make the small service easy to run, inspect, and discuss in the interview.
 - The supplied files can be selected directly in Swagger UI.
 - A submitted task returns immediately and can be polled to a terminal state.
 - Successful variants can be downloaded from their returned URLs.
-- All configured quality checks pass.
+- Ruff formatting and linting, mypy, and the default pytest suite pass locally
+  and in CI.
+- The container process is non-root and starts from the committed lockfile.
 
 ## Completion
 

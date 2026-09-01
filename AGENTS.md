@@ -1,4 +1,4 @@
-# Engineering Instructions - Minimal MVP
+# Engineering Instructions - Minimal Viable Solution
 
 ## Source of truth
 
@@ -10,23 +10,26 @@
 - If implementation needs a materially different design, update the design and
   plan explicitly rather than silently expanding the architecture.
 
-## Simplicity is a requirement
+## Simplicity and maintainability are requirements
 
-- Make the smallest coherent change that completes the current branch step.
+- Make the smallest coherent, maintainable change that completes the current
+  branch step.
 - Prefer direct functions, Pydantic models, and explicit data flow over generic
   frameworks or speculative abstractions.
 - Keep the application near the module structure in `DESIGN.md`.
+- Use a small package when it gives an active concern clear ownership, but do
+  not add layers or files only for architectural symmetry.
 - Do not add a database, migrations, Redis, a distributed queue, multiple
   workers, object storage, authentication, a custom frontend, an agent
   framework, or a planning agent.
 - Do not add generalized repositories, service layers, factories, registries,
-  plugin systems, exception hierarchies, or configuration systems for possible
-  future needs.
+  plugin systems, exception hierarchies, or configuration frameworks for
+  possible future needs.
 - Do not implement production hardening that is listed as a non-goal.
 - Preserve unrelated user changes and avoid unrelated refactoring.
 
-These exclusions are intentional MVP decisions. Add one only after an explicit
-requirement changes and the design is updated.
+These exclusions are intentional minimal-solution decisions. Add one only after
+an explicit requirement changes and the design is updated.
 
 ## Required architecture
 
@@ -38,6 +41,25 @@ requirement changes and the design is updated.
   multi-provider abstraction.
 - Use Pydantic models at HTTP, JSON-file, and model-output boundaries.
 - Never use unvalidated model prose to control application behavior.
+
+## Project organization and dependency flow
+
+- Treat `create_app` as the composition root. Construct application-owned state
+  and long-lived clients there, inject narrow dependencies explicitly, and do
+  not introduce a dependency-injection container.
+- Keep all environment access and settings validation in `app/config/`. Export
+  the small public settings interface from `config/__init__.py`; other modules
+  must not call `os.getenv` or depend on configuration internals.
+- Keep dependencies one-way: HTTP layer to workflow, workflow to validated
+  models and the image-service contract, and the OpenAI adapter to provider
+  APIs. `workflow.py` must remain independent of FastAPI and provider payloads.
+- Use one module for one cohesive concern. Create a package only when it owns a
+  distinct boundary or multiple cohesive modules; do not create one-file
+  packages, one-class modules, or placeholder directories for possible growth.
+- Create expensive or connection-owning clients once per application and close
+  them through the FastAPI lifespan. Do not create an OpenAI client per call.
+- Keep module imports free of filesystem creation, network calls, and other
+  hidden side effects; perform startup work explicitly in the composition root.
 
 ## Workflow invariants
 
@@ -87,6 +109,11 @@ requirement changes and the design is updated.
   explanation.
 - Remove temporary code, dead code, and stale comments before completing a
   branch.
+- Keep public configuration and service seams small; do not expose internal
+  helper functions through package `__init__.py` files.
+- Use Ruff for formatting and linting and mypy for application type checking
+  once introduced in `PLAN.md`. Keep configuration centralized in
+  `pyproject.toml` and prefer fixing findings over broad ignores.
 
 ## Testing
 
@@ -110,6 +137,11 @@ requirement changes and the design is updated.
   with the standard library or an already required package.
 - Keep runtime configuration limited to `OPENAI_API_KEY`, `IMAGE_MODEL`, and
   `EVALUATION_MODEL` unless a new requirement is documented first.
+- Validate settings once at startup, fail fast with a safe message, and pass the
+  resulting immutable configuration explicitly. Tests should construct settings
+  directly rather than mutate global environment state.
+- Document environment names with safe placeholders in `.env.example`; never
+  commit `.env` files, credentials, or generated runtime artifacts.
 - Use Python's standard `logging` module; do not add a logging framework.
 - Run exactly one Uvicorn worker because task state is in memory.
 
@@ -118,6 +150,9 @@ requirement changes and the design is updated.
 - Use the exact branch names and ordering in `PLAN.md` unless the user asks
   for a change.
 - Before handoff, run the checks listed for the current branch.
+- After the quality tools are introduced, run Ruff formatting/linting, mypy, and
+  the default pytest suite before every handoff. CI must run the same commands
+  with a frozen lockfile install.
 - Report what changed, which checks ran, and any remaining limitation or risk.
 - Mark a plan step complete only when its deliverables and checks are genuinely
   complete.
