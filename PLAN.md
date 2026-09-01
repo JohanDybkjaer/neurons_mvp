@@ -1,6 +1,6 @@
 # Visual Recommendations - Minimal MVP Plan
 
-`DESIGN_MVP.md` is the source of truth for scope and architecture. This plan
+`DESIGN.md` is the source of truth for scope and architecture. This plan
 delivers that design in three reviewable branches. It intentionally avoids a
 branch per layer or infrastructure concern.
 
@@ -10,11 +10,11 @@ branch per layer or infrastructure concern.
 - Implement only the work listed for that branch.
 - Keep implementation, tests, and directly affected documentation together.
 - Merge a branch only after its checks pass.
-- Update `DESIGN_MVP.md` before implementing a materially different design.
+- Update `DESIGN.md` before implementing a materially different design.
 
 ## Progress
 
-- [ ] Step 1 - `mvp/api-and-workflow`
+- [x] Step 1 - `mvp/api-and-workflow`
 - [ ] Step 2 - `mvp/openai-integration`
 - [ ] Step 3 - `mvp/container-and-demo`
 
@@ -29,8 +29,10 @@ nondeterministic model calls.
 
 - Create the minimal Python project with FastAPI, Pydantic, Pillow, Uvicorn,
   python-multipart, pytest, and HTTP test dependencies managed by `uv`.
-- Keep application code to the four modules described in `DESIGN_MVP.md` unless
+- Keep application code to the five modules described in `DESIGN.md` unless
   a concrete implementation need proves otherwise.
+- Define validated application configuration for the runtime root, image upload
+  limit, and provider timeout.
 - Define the recommendation, brand-guideline, task, result, and structured
   evaluation models.
 - Implement:
@@ -122,7 +124,7 @@ Make the small service easy to run, inspect, and discuss in the interview.
   - Required environment variables.
   - The Swagger UI demonstration flow.
   - The asynchronous submit-and-poll behavior.
-  - Accepted limitations from `DESIGN_MVP.md`.
+  - Accepted limitations from `DESIGN.md`.
 - Run the full automated test suite.
 - Manually verify the supplied two-image request through Swagger UI.
 - If credentials and budget are available, run the opt-in smoke test once and
@@ -140,5 +142,5 @@ Make the small service easy to run, inspect, and discuss in the interview.
 ## Completion
 
 The MVP is finished after Step 3 when every acceptance criterion in
-`DESIGN_MVP.md` is satisfied. Do not add a production-hardening branch unless a
+`DESIGN.md` is satisfied. Do not add a production-hardening branch unless a
 new requirement explicitly changes the scope.

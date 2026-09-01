@@ -227,6 +227,11 @@ EVALUATION_MODEL
 Model names receive sensible defaults but remain configurable because model
 availability changes independently of the application.
 
+`AppConfig` also owns the validated operational defaults already used by the
+application: the runtime task root, image upload limit, and provider timeout.
+These values are supplied directly when constructing the application; they do
+not introduce additional environment variables.
+
 ## Storage and task state
 
 Task state is a process-local dictionary keyed by a UUID. Input and generated
@@ -275,6 +280,7 @@ Do not log API keys, image bytes, complete prompts, or uploaded JSON payloads.
 
 ```text
 src/app/
+  config.py           Validated runtime paths, limits, and timeouts
   main.py             FastAPI app, endpoints, and in-memory task registry
   models.py           Request, task, and evaluation models
   workflow.py         Two-image orchestration and single repair loop
@@ -285,10 +291,10 @@ tests/
 Dockerfile
 pyproject.toml
 README.md
-DESIGN_MVP.md
+DESIGN.md
 ```
 
-Four small application modules are enough. Additional repositories, domain
+Five small application modules are enough. Additional repositories, domain
 layers, dependency-injection frameworks, and provider abstractions are excluded.
 
 ## Tests

@@ -15,7 +15,7 @@
 - Make the smallest coherent change that completes the current branch step.
 - Prefer direct functions, Pydantic models, and explicit data flow over generic
   frameworks or speculative abstractions.
-- Keep the application near the four-module structure in `DESIGN.md`.
+- Keep the application near the module structure in `DESIGN.md`.
 - Do not add a database, migrations, Redis, a distributed queue, multiple
   workers, object storage, authentication, a custom frontend, an agent
   framework, or a planning agent.
