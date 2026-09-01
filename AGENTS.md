@@ -106,10 +106,14 @@ an explicit requirement changes and the design is updated.
   `openai_service.py`.
 - Keep orchestration and the bounded repair loop in `workflow.py`.
 - Avoid duplicated prompt construction and validation logic.
+- Give each application module a concise docstring stating its responsibility.
+- Add concise docstrings to public classes and functions, including FastAPI
+  handlers so their purpose is visible in Swagger/OpenAPI. Document private
+  helpers when their contract, validation rule, or side effect is not obvious.
 - Add comments only for non-obvious constraints or decisions. Do not narrate
   straightforward code.
-- Add docstrings only where a public contract or non-obvious side effect needs
-  explanation.
+- Keep docstrings and comments current when behavior changes; remove text that
+  merely repeats names, types, or straightforward statements.
 - Remove temporary code, dead code, and stale comments before completing a
   branch.
 - Keep public configuration and service seams small; do not expose internal
