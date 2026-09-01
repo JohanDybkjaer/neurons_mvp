@@ -54,15 +54,20 @@ easier to review and change without expanding the product scope:
   automated quality gate.
 
 Packages are introduced only for a real ownership boundary. Configuration has
-one because environment-backed settings have a distinct boundary and public
-interface. The other concerns remain single modules until their size or
-responsibilities provide a concrete reason to split them.
+one because environment-backed settings have a distinct interface. API routing
+has one to make the public version boundary visible. The other concerns remain
+single modules until their size or responsibilities provide a concrete reason
+to split them.
 
 ## API
 
 FastAPI generates the OpenAPI schema and Swagger UI at `/docs`.
 
-### `POST /tasks`
+All task endpoints are versioned under `/api/v1`. The operational health check
+is deliberately unversioned because it reports whether this service process is
+running rather than exposing a product API contract.
+
+### `POST /api/v1/tasks`
 
 Starts an asynchronous visual-recommendation task.
 
@@ -84,11 +89,11 @@ Successful response: `202 Accepted`
 {
   "task_id": "3e866993-5c55-4db5-a2f9-542c442018e9",
   "status": "pending",
-  "status_url": "/tasks/3e866993-5c55-4db5-a2f9-542c442018e9"
+  "status_url": "/api/v1/tasks/3e866993-5c55-4db5-a2f9-542c442018e9"
 }
 ```
 
-### `GET /tasks/{task_id}`
+### `GET /api/v1/tasks/{task_id}`
 
 Returns the current task state. The possible states are `pending`, `running`,
 `completed`, and `failed`.
@@ -103,7 +108,7 @@ A completed response contains one result per input image:
     {
       "image_id": "image_1",
       "source_filename": "creative_1.png",
-      "variant_url": "/tasks/3e866993-5c55-4db5-a2f9-542c442018e9/variants/image_1",
+      "variant_url": "/api/v1/tasks/3e866993-5c55-4db5-a2f9-542c442018e9/variants/image_1",
       "attempts": 1,
       "evaluation": {
         "recommendations": [
@@ -128,7 +133,7 @@ A completed response contains one result per input image:
 }
 ```
 
-### `GET /tasks/{task_id}/variants/{image_id}`
+### `GET /api/v1/tasks/{task_id}/variants/{image_id}`
 
 Returns the generated image file. `image_id` is a server-owned identifier and is
 resolved only within the corresponding task directory.
@@ -139,9 +144,9 @@ Returns `{"status": "ok"}` when the process is running.
 
 ## Asynchronous execution and parallelism
 
-The HTTP request must not wait for image generation. `POST /tasks` records an
-in-memory task, schedules the workflow as a FastAPI background task, and returns
-immediately. The client polls `GET /tasks/{task_id}`.
+The HTTP request must not wait for image generation. `POST /api/v1/tasks`
+records an in-memory task, schedules the workflow as a FastAPI background task,
+and returns immediately. The client polls `GET /api/v1/tasks/{task_id}`.
 
 The two image pipelines are independent and run concurrently. Work within one
 image pipeline stays sequential because each step depends on the preceding
@@ -149,7 +154,7 @@ output.
 
 ```mermaid
 flowchart LR
-    POST["POST /tasks"] --> BG["Background task"]
+    POST["POST /api/v1/tasks"] --> BG["Background task"]
     BG --> I1["Process image 1"]
     BG --> I2["Process image 2"]
     I1 --> G1["Generate"] --> E1["Evaluate all criteria"] --> R1{"Passed?"}
@@ -315,10 +320,16 @@ Do not log API keys, image bytes, complete prompts, or uploaded JSON payloads.
 
 ```text
 src/app/
+  api/
+    __init__.py       Public router exports
+    routes.py         Unversioned operational routes
+    v1/
+      __init__.py     Public v1 router export
+      routes.py       Versioned task endpoints and request validation
   config/
     __init__.py       Public configuration exports
     settings.py       Environment loading and validated application settings
-  main.py             Composition root, endpoints, and in-memory task registry
+  main.py             Composition root and in-memory task registry
   models.py           Request, task, and evaluation models
   workflow.py         Two-image orchestration and single repair loop
   openai_service.py   Image-editing and evaluation calls
@@ -332,11 +343,11 @@ DESIGN.md
 .github/workflows/ci.yml
 ```
 
-These five small application concerns are enough. Small packages are appropriate
-when they give an active concern a clear home, but additional repositories,
-domain layers, dependency-injection frameworks, and provider abstractions are
-excluded. `config/__init__.py` exposes only the settings objects used by the
-application; callers do not depend on its internal file layout.
+These small application concerns are enough. The `api/` and `config/` packages
+make active boundaries visually explicit, but additional repositories, domain
+layers, dependency-injection frameworks, and provider abstractions are excluded.
+Package `__init__.py` files expose only the routers or settings used by callers;
+callers do not depend on internal file layout.
 
 ## Tests
 

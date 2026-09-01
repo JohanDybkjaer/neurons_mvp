@@ -34,20 +34,22 @@ nondeterministic model calls.
 
 - Create the minimal Python project with FastAPI, Pydantic, Pillow, Uvicorn,
   python-multipart, pytest, and HTTP test dependencies managed by `uv`.
-- Keep application code to the five concerns described in `DESIGN.md` unless
+- Keep application code to the concerns described in `DESIGN.md` unless
   a concrete implementation need proves otherwise.
 - Define a small configuration package with validated settings for the runtime
   root, image upload limit, and provider timeout.
 - Use `create_app` as the composition root and inject configuration and the
   image service directly, without a dependency-injection framework.
+- Keep task routes together under `app/api/v1/` with the `/api/v1` prefix, keep
+  `/health` unversioned, and register both routers in `main.py`.
 - Keep FastAPI types at the HTTP boundary and provider-specific details out of
   the workflow.
 - Define the recommendation, brand-guideline, task, result, and structured
   evaluation models.
 - Implement:
-  - `POST /tasks`
-  - `GET /tasks/{task_id}`
-  - `GET /tasks/{task_id}/variants/{image_id}`
+  - `POST /api/v1/tasks`
+  - `GET /api/v1/tasks/{task_id}`
+  - `GET /api/v1/tasks/{task_id}/variants/{image_id}`
   - `GET /health`
 - Accept one or two image files plus the two supplied JSON-file shapes through
   `multipart/form-data`.

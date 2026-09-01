@@ -50,12 +50,15 @@ an explicit requirement changes and the design is updated.
 - Keep all environment access and settings validation in `app/config/`. Export
   the small public settings interface from `config/__init__.py`; other modules
   must not call `os.getenv` or depend on configuration internals.
+- Keep product routes in `app/api/v1/` under the `/api/v1` URL prefix. Keep
+  `/health` unversioned, and keep `main.py` limited to application construction,
+  state ownership, and router registration.
 - Keep dependencies one-way: HTTP layer to workflow, workflow to validated
   models and the image-service contract, and the OpenAI adapter to provider
   APIs. `workflow.py` must remain independent of FastAPI and provider payloads.
-- Use one module for one cohesive concern. Create a package only when it owns a
-  distinct boundary or multiple cohesive modules; do not create one-file
-  packages, one-class modules, or placeholder directories for possible growth.
+- Use one module for one cohesive concern. The `api/` and `config/` packages own
+  explicit boundaries; do not add further one-file packages, one-class modules,
+  or placeholder directories for possible growth.
 - Create expensive or connection-owning clients once per application and close
   them through the FastAPI lifespan. Do not create an OpenAI client per call.
 - Keep module imports free of filesystem creation, network calls, and other

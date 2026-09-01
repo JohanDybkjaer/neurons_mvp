@@ -10,6 +10,8 @@ from app.main import create_app
 from app.models import TaskStatus
 from conftest import make_evaluation, upload_payload
 
+TASKS_PATH = "/api/v1/tasks"
+
 
 class RecordingService:
     def __init__(self, outcomes: dict[str, list[bool]] | None = None):
@@ -54,10 +56,17 @@ def test_health_and_openapi_expose_contract(tmp_path):
 
     assert client.get("/health").json() == {"status": "ok"}
     schema = client.get("/openapi.json").json()
-    assert {"/tasks", "/tasks/{task_id}", "/tasks/{task_id}/variants/{image_id}", "/health"} <= set(schema["paths"])
-    request_content = schema["paths"]["/tasks"]["post"]["requestBody"]["content"]
+    assert {
+        TASKS_PATH,
+        f"{TASKS_PATH}/{{task_id}}",
+        f"{TASKS_PATH}/{{task_id}}/variants/{{image_id}}",
+        "/health",
+    } <= set(schema["paths"])
+    request_content = schema["paths"][TASKS_PATH]["post"]["requestBody"][
+        "content"
+    ]
     assert "multipart/form-data" in request_content
-    assert schema["paths"]["/tasks"]["post"]["responses"]["202"]
+    assert schema["paths"][TASKS_PATH]["post"]["responses"]["202"]
 
 
 def test_two_image_task_completes_with_retrievable_variants(
@@ -72,7 +81,7 @@ def test_two_image_task_completes_with_retrievable_variants(
     )
 
     response = client.post(
-        "/tasks", files=[*images, recommendations_file, guidelines_file]
+        TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
     )
 
     assert response.status_code == 202
@@ -105,7 +114,7 @@ def test_two_image_task_completes_with_retrievable_variants(
 def test_invalid_json_is_rejected(tmp_path, png_bytes):
     client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
     response = client.post(
-        "/tasks",
+        TASKS_PATH,
         files=[
             ("images", ("creative.png", png_bytes, "image/png")),
             ("recommendations", ("recommendations.json", "not-json", "application/json")),
@@ -126,7 +135,7 @@ def test_invalid_image_is_rejected(
     client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
 
     response = client.post(
-        "/tasks", files=[*images, recommendations_file, guidelines_file]
+        TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
     )
 
     assert response.status_code == 422
@@ -149,7 +158,7 @@ def test_oversized_image_is_rejected(
     )
 
     response = client.post(
-        "/tasks", files=[*images, recommendations_file, guidelines_file]
+        TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
     )
 
     assert response.status_code == 422
@@ -166,7 +175,7 @@ def test_mismatched_filenames_are_rejected(
     client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
 
     response = client.post(
-        "/tasks", files=[*images, recommendations_file, guidelines_file]
+        TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
     )
 
     assert response.status_code == 422
@@ -185,7 +194,7 @@ def test_more_than_two_images_are_rejected(
     client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
 
     response = client.post(
-        "/tasks", files=[*images, recommendations_file, guidelines_file]
+        TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
     )
 
     assert response.status_code == 422
@@ -210,7 +219,7 @@ def test_provider_failure_marks_task_failed_safely(
     )
 
     created = client.post(
-        "/tasks", files=[*images, recommendations_file, guidelines_file]
+        TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
     ).json()
     task = client.get(created["status_url"]).json()
 
@@ -223,8 +232,8 @@ def test_provider_failure_marks_task_failed_safely(
 def test_unknown_task_and_variant_return_safe_not_found(tmp_path):
     client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
 
-    assert client.get("/tasks/not-a-task").status_code == 404
-    assert client.get("/tasks/not-a-task/variants/image_1").status_code == 404
+    assert client.get(f"{TASKS_PATH}/not-a-task").status_code == 404
+    assert client.get(f"{TASKS_PATH}/not-a-task/variants/image_1").status_code == 404
 
 
 def test_configuration_rejects_non_positive_limits():

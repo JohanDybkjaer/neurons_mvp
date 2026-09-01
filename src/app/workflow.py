@@ -25,6 +25,7 @@ class ImageWorkItem:
     source_filename: str
     original_path: Path
     variant_path: Path
+    variant_url: str
     recommendations: list[Recommendation]
     brand_guidelines: BrandGuidelines
 
@@ -67,7 +68,6 @@ async def _evaluate(
 
 
 async def _process_image(
-    task_id: str,
     item: ImageWorkItem,
     service: OpenAIService,
     semaphore: asyncio.Semaphore,
@@ -103,7 +103,7 @@ async def _process_image(
         return ImageResult(
             image_id=item.image_id,
             source_filename=item.source_filename,
-            variant_url=f"/tasks/{task_id}/variants/{item.image_id}",
+            variant_url=item.variant_url,
             attempts=attempts,
             evaluation=evaluation,
         )
@@ -122,7 +122,6 @@ async def run_task(
             await asyncio.gather(
                 *(
                     _process_image(
-                        task.task_id,
                         item,
                         service,
                         semaphore,

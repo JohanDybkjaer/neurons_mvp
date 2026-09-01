@@ -22,6 +22,7 @@ def make_work_item(
         source_filename=f"{image_id}.png",
         original_path=original_path,
         variant_path=variant_path,
+        variant_url=f"/api/v1/tasks/task-id/variants/{image_id}",
         recommendations=recommendations,
         brand_guidelines=brand_guidelines,
     )
@@ -179,4 +180,3 @@ def test_unvalidated_evaluator_output_cannot_control_workflow(
     assert task.status == TaskStatus.failed
     assert task.error == "Task processing failed."
     assert task.results == []
-
