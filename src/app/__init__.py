@@ -1,1 +1,1 @@
-
+"""Visual recommendations API package."""

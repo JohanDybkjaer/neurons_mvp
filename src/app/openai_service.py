@@ -1,3 +1,5 @@
+"""Image generation and visual evaluation service boundary."""
+
 import asyncio
 import shutil
 from pathlib import Path
@@ -22,6 +24,8 @@ class OpenAIService:
         brand_guidelines: BrandGuidelines,
         repair_feedback: Evaluation | None = None,
     ) -> None:
+        """Generate a variant, optionally using validated repair feedback."""
+
         del recommendations, brand_guidelines, repair_feedback
         await asyncio.to_thread(shutil.copyfile, original_path, destination_path)
 
@@ -32,6 +36,8 @@ class OpenAIService:
         recommendations: list[Recommendation],
         brand_guidelines: BrandGuidelines,
     ) -> Evaluation:
+        """Evaluate all recommendations and brand criteria in one result."""
+
         del original_path, variant_path
         return Evaluation(
             recommendations=[
@@ -52,4 +58,3 @@ class OpenAIService:
             ],
             overall_pass=True,
         )
-

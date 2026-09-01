@@ -1,9 +1,13 @@
+"""Validated models for HTTP, uploaded JSON, workflow, and AI boundaries."""
+
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 
 class Recommendation(BaseModel):
+    """One requested visual change for a creative."""
+
     model_config = ConfigDict(extra="forbid")
 
     id: str
@@ -13,6 +17,8 @@ class Recommendation(BaseModel):
 
 
 class BrandGuidelines(BaseModel):
+    """Brand constraints that generation and evaluation must respect."""
+
     model_config = ConfigDict(extra="forbid")
 
     protected_regions: list[str]
@@ -21,6 +27,8 @@ class BrandGuidelines(BaseModel):
     brand_elements: str
 
     def criteria(self) -> list[str]:
+        """Flatten every explicit guideline into evaluator check criteria."""
+
         return [
             *self.protected_regions,
             self.typography,
@@ -30,6 +38,8 @@ class BrandGuidelines(BaseModel):
 
 
 class RecommendationFile(BaseModel):
+    """Recommendations associated with one uploaded filename."""
+
     model_config = ConfigDict(extra="forbid")
 
     filename: str
@@ -37,6 +47,8 @@ class RecommendationFile(BaseModel):
 
 
 class BrandGuidelineFile(BaseModel):
+    """Brand guidelines associated with one uploaded filename."""
+
     model_config = ConfigDict(extra="forbid")
 
     filename: str
@@ -44,14 +56,16 @@ class BrandGuidelineFile(BaseModel):
 
 
 class RecommendationsDocument(RootModel[dict[str, RecommendationFile]]):
-    pass
+    """Top-level recommendations upload keyed by source document labels."""
 
 
 class BrandGuidelinesDocument(RootModel[dict[str, BrandGuidelineFile]]):
-    pass
+    """Top-level brand-guidelines upload keyed by source document labels."""
 
 
 class RecommendationCheck(BaseModel):
+    """Evaluator decision for one supplied recommendation."""
+
     model_config = ConfigDict(extra="forbid")
 
     id: str
@@ -60,6 +74,8 @@ class RecommendationCheck(BaseModel):
 
 
 class BrandCheck(BaseModel):
+    """Evaluator decision for one explicit brand criterion."""
+
     model_config = ConfigDict(extra="forbid")
 
     criterion: str
@@ -68,6 +84,8 @@ class BrandCheck(BaseModel):
 
 
 class Evaluation(BaseModel):
+    """Complete validated evaluator response for one generated variant."""
+
     model_config = ConfigDict(extra="forbid")
 
     recommendations: list[RecommendationCheck]
@@ -76,6 +94,8 @@ class Evaluation(BaseModel):
 
 
 class TaskStatus(str, Enum):
+    """Lifecycle states exposed by the polling API."""
+
     pending = "pending"
     running = "running"
     completed = "completed"
@@ -83,6 +103,8 @@ class TaskStatus(str, Enum):
 
 
 class ImageResult(BaseModel):
+    """Final variant metadata and evaluation for one creative."""
+
     image_id: str
     source_filename: str
     variant_url: str
@@ -91,6 +113,8 @@ class ImageResult(BaseModel):
 
 
 class TaskState(BaseModel):
+    """Mutable process-local state returned by the polling endpoint."""
+
     task_id: str
     status: TaskStatus
     results: list[ImageResult] = Field(default_factory=list)
@@ -98,10 +122,14 @@ class TaskState(BaseModel):
 
 
 class TaskCreated(BaseModel):
+    """Acknowledgement returned when background processing is scheduled."""
+
     task_id: str
     status: TaskStatus
     status_url: str
 
 
 class HealthResponse(BaseModel):
+    """Operational health-check response."""
+
     status: str

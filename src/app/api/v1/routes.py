@@ -1,3 +1,5 @@
+"""Version 1 task endpoints and upload-boundary validation."""
+
 import asyncio
 import io
 import json
@@ -39,6 +41,8 @@ FilenameEntry = TypeVar("FilenameEntry", RecommendationFile, BrandGuidelineFile)
 
 
 def _decode_image(image_bytes: bytes) -> str:
+    """Decode an upload and return its server-owned file suffix."""
+
     try:
         with Image.open(io.BytesIO(image_bytes)) as image:
             image_format = image.format
@@ -58,6 +62,8 @@ async def _parse_json_upload(
     model_type: type[ModelType],
     label: str,
 ) -> ModelType:
+    """Parse an uploaded JSON document into its boundary model."""
+
     try:
         content = await upload.read()
         return model_type.model_validate(json.loads(content))
@@ -72,6 +78,8 @@ def _index_by_filename(
     entries: list[FilenameEntry],
     label: str,
 ) -> dict[str, FilenameEntry]:
+    """Index document entries while rejecting ambiguous filenames."""
+
     indexed = {entry.filename: entry for entry in entries}
     if len(indexed) != len(entries):
         raise HTTPException(
@@ -86,6 +94,8 @@ def _validate_filename_matches(
     recommendations: dict[str, RecommendationFile],
     guidelines: dict[str, BrandGuidelineFile],
 ) -> None:
+    """Require an exact one-to-one match across all uploaded filenames."""
+
     expected = set(filenames)
     if len(expected) != len(filenames):
         raise HTTPException(
@@ -117,6 +127,8 @@ async def create_task(
         UploadFile, File(description="Brand guidelines JSON file")
     ],
 ) -> TaskCreated:
+    """Validate uploads, create task-owned artifacts, and schedule processing."""
+
     app_config = cast(AppConfig, request.app.state.config)
     if not 1 <= len(images) <= 2:
         raise HTTPException(
@@ -146,6 +158,8 @@ async def create_task(
 
     validated_images: list[tuple[str, bytes, str]] = []
     for image in images:
+        # Reading one extra byte detects an oversized upload without buffering
+        # the rest of an untrusted file.
         image_bytes = await image.read(app_config.max_image_bytes + 1)
         if len(image_bytes) > app_config.max_image_bytes:
             raise HTTPException(
@@ -161,6 +175,8 @@ async def create_task(
             ) from None
         validated_images.append((image.filename or "", image_bytes, suffix))
 
+    # UUID-backed directories ensure uploaded filenames are metadata only and
+    # can never choose a filesystem path.
     task_id = str(uuid4())
     task_directory = app_config.runtime_root / task_id
     input_directory = task_directory / "inputs"
@@ -211,6 +227,8 @@ async def create_task(
 
 @router.get("/tasks/{task_id}", response_model=TaskState)
 async def get_task(request: Request, task_id: str) -> TaskState:
+    """Return the current state of a submitted task."""
+
     task = request.app.state.tasks.get(task_id)
     if task is None:
         raise HTTPException(
@@ -225,6 +243,8 @@ async def get_variant(
     task_id: str,
     image_id: str,
 ) -> FileResponse:
+    """Return a completed variant resolved from server-owned identifiers."""
+
     task = request.app.state.tasks.get(task_id)
     variant_path = request.app.state.variant_paths.get(task_id, {}).get(image_id)
     if (

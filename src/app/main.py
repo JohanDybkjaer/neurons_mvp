@@ -1,3 +1,5 @@
+"""FastAPI application composition root."""
+
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -13,6 +15,8 @@ def create_app(
     service: OpenAIService | None = None,
     config: AppConfig | None = None,
 ) -> FastAPI:
+    """Build an isolated application with injectable service and settings."""
+
     application = FastAPI(
         title="Visual Recommendations MVP",
         version="1.0.0",
