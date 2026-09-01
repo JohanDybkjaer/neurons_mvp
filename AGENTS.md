@@ -2,10 +2,10 @@
 
 ## Source of truth
 
-- Read `DESIGN_MVP.md`, `PLAN_MVP.md`, the relevant code, and the relevant tests
+- Read `DESIGN.md`, `PLAN.md`, the relevant code, and the relevant tests
   before changing behavior.
-- Treat `DESIGN_MVP.md` as the architecture and scope contract.
-- Follow the current branch step in `PLAN_MVP.md`; do not implement later steps
+- Treat `DESIGN.md` as the architecture and scope contract.
+- Follow the current branch step in `PLAN.md`; do not implement later steps
   early.
 - If implementation needs a materially different design, update the design and
   plan explicitly rather than silently expanding the architecture.
@@ -15,7 +15,7 @@
 - Make the smallest coherent change that completes the current branch step.
 - Prefer direct functions, Pydantic models, and explicit data flow over generic
   frameworks or speculative abstractions.
-- Keep the application near the four-module structure in `DESIGN_MVP.md`.
+- Keep the application near the four-module structure in `DESIGN.md`.
 - Do not add a database, migrations, Redis, a distributed queue, multiple
   workers, object storage, authentication, a custom frontend, an agent
   framework, or a planning agent.
@@ -59,7 +59,7 @@ requirement changes and the design is updated.
 
 - Treat uploads, JSON, environment values, provider responses, and filenames as
   untrusted at their boundaries.
-- Apply only the inexpensive validation required by `DESIGN_MVP.md`: image
+- Apply only the inexpensive validation required by `DESIGN.md`: image
   count, size, decoded PNG/JPEG format, valid JSON schemas, and filename
   matching.
 - Use UUIDs and server-owned identifiers for paths and public artifact lookup.
@@ -115,7 +115,7 @@ requirement changes and the design is updated.
 
 ## Branch delivery
 
-- Use the exact branch names and ordering in `PLAN_MVP.md` unless the user asks
+- Use the exact branch names and ordering in `PLAN.md` unless the user asks
   for a change.
 - Before handoff, run the checks listed for the current branch.
 - Report what changed, which checks ran, and any remaining limitation or risk.
