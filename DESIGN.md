@@ -1,8 +1,9 @@
-# Visual Recommendations - Minimal MVP Design
+# Visual Recommendations - Minimal Viable Solution Design
 
 ## Goal
 
-Build the smallest containerised, asynchronous FastAPI service that meets the requirements:
+Build a minimal viable, maintainable, containerised asynchronous FastAPI service
+that meets the requirements:
 
 - Accept marketing creatives, textual recommendations, and brand guidelines.
 - Generate an edited visual variant for each creative.
@@ -10,9 +11,11 @@ Build the smallest containerised, asynchronous FastAPI service that meets the re
 - Evaluate whether the variant complies with the brand guidelines.
 - Expose the workflow through Swagger UI without building a separate frontend.
 
-The implementation should demonstrate a clear agentic workflow and sound
-software-engineering choices without introducing production infrastructure that
-the assignment does not require.
+The implementation should demonstrate a clear agentic workflow and apply
+proportionate software-engineering best practices: explicit ownership, validated
+boundaries and configuration, dependency injection at external seams, and
+deterministic tests. These practices must not introduce production infrastructure
+or speculative abstraction that the assignment does not require.
 
 ## Core design
 
@@ -29,11 +32,44 @@ attempt using the evaluator's feedback. This bounded feedback loop is the
 agentic part of the workflow. It does not require an agent framework, planner,
 tool-calling loop, or general-purpose state machine.
 
+## Engineering baseline
+
+The MVP keeps a few conventional quality boundaries because they make the code
+easier to review and change without expanding the product scope:
+
+- `create_app` is the composition root. It constructs application-owned state
+  and accepts configuration and the OpenAI adapter as dependencies, which keeps
+  tests isolated without a dependency-injection framework.
+- The `config` package is the only place that reads environment variables.
+  Settings are typed, validated once at startup, and then passed explicitly.
+- Dependencies point inward: FastAPI handlers call the workflow, the workflow
+  uses validated models and the narrow image-service contract, and provider
+  request details stay in the OpenAI adapter. The workflow does not import or
+  return FastAPI types.
+- Long-lived provider clients are created once per application and closed by
+  the FastAPI lifespan. A client is not constructed for every model call.
+- `pyproject.toml` is the single home for dependency and tool configuration;
+  `uv.lock` is committed for reproducible installs.
+- Formatting, linting, static type checking, and deterministic tests form the
+  automated quality gate.
+
+Packages are introduced only for a real ownership boundary. Configuration has
+one because environment-backed settings have a distinct interface. API routing
+has one to make the public version boundary visible. The other concerns remain
+single modules until their size or responsibilities provide a concrete reason
+to split them.
+
 ## API
 
-FastAPI generates the OpenAPI schema and Swagger UI at `/docs`.
+FastAPI exposes the interactive Swagger UI at `/docs` and its generated OpenAPI
+schema at `/openapi.json`. Swagger UI is the demo interface for submitting the
+multipart request and inspecting the polling endpoints.
 
-### `POST /tasks`
+All task endpoints are versioned under `/api/v1`. The operational health check
+is deliberately unversioned because it reports whether this service process is
+running rather than exposing a product API contract.
+
+### `POST /api/v1/tasks`
 
 Starts an asynchronous visual-recommendation task.
 
@@ -55,11 +91,11 @@ Successful response: `202 Accepted`
 {
   "task_id": "3e866993-5c55-4db5-a2f9-542c442018e9",
   "status": "pending",
-  "status_url": "/tasks/3e866993-5c55-4db5-a2f9-542c442018e9"
+  "status_url": "/api/v1/tasks/3e866993-5c55-4db5-a2f9-542c442018e9"
 }
 ```
 
-### `GET /tasks/{task_id}`
+### `GET /api/v1/tasks/{task_id}`
 
 Returns the current task state. The possible states are `pending`, `running`,
 `completed`, and `failed`.
@@ -74,7 +110,7 @@ A completed response contains one result per input image:
     {
       "image_id": "image_1",
       "source_filename": "creative_1.png",
-      "variant_url": "/tasks/3e866993-5c55-4db5-a2f9-542c442018e9/variants/image_1",
+      "variant_url": "/api/v1/tasks/3e866993-5c55-4db5-a2f9-542c442018e9/variants/image_1",
       "attempts": 1,
       "evaluation": {
         "recommendations": [
@@ -99,7 +135,7 @@ A completed response contains one result per input image:
 }
 ```
 
-### `GET /tasks/{task_id}/variants/{image_id}`
+### `GET /api/v1/tasks/{task_id}/variants/{image_id}`
 
 Returns the generated image file. `image_id` is a server-owned identifier and is
 resolved only within the corresponding task directory.
@@ -110,9 +146,9 @@ Returns `{"status": "ok"}` when the process is running.
 
 ## Asynchronous execution and parallelism
 
-The HTTP request must not wait for image generation. `POST /tasks` records an
-in-memory task, schedules the workflow as a FastAPI background task, and returns
-immediately. The client polls `GET /tasks/{task_id}`.
+The HTTP request must not wait for image generation. `POST /api/v1/tasks`
+records an in-memory task, schedules the workflow as a FastAPI background task,
+and returns immediately. The client polls `GET /api/v1/tasks/{task_id}`.
 
 The two image pipelines are independent and run concurrently. Work within one
 image pipeline stays sequential because each step depends on the preceding
@@ -120,7 +156,7 @@ output.
 
 ```mermaid
 flowchart LR
-    POST["POST /tasks"] --> BG["Background task"]
+    POST["POST /api/v1/tasks"] --> BG["Background task"]
     BG --> I1["Process image 1"]
     BG --> I2["Process image 2"]
     I1 --> G1["Generate"] --> E1["Evaluate all criteria"] --> R1{"Passed?"}
@@ -216,7 +252,7 @@ The application uses the asynchronous OpenAI client so the two image pipelines
 can overlap network waits. Tests inject a deterministic fake service and never
 make real API calls.
 
-Configuration is limited to environment variables:
+Runtime configuration is limited to environment variables:
 
 ```text
 OPENAI_API_KEY
@@ -224,8 +260,19 @@ IMAGE_MODEL
 EVALUATION_MODEL
 ```
 
-Model names receive sensible defaults but remain configurable because model
-availability changes independently of the application.
+The configuration package maps these variables to one immutable, typed
+`AppConfig`. It fails fast with a concise error when required configuration is
+missing or invalid. Model names receive sensible defaults but remain
+configurable because model availability changes independently of the
+application. `.env.example` documents names and safe example values; secrets
+are never committed, and loading a local `.env` file is a developer convenience
+rather than a second configuration system.
+
+`AppConfig` also owns the validated operational defaults already used by the
+application: the runtime task root, image upload limit, and provider timeout.
+These values are supplied directly when constructing the application; they do
+not introduce additional environment variables. Tests construct `AppConfig`
+directly and never mutate process-wide environment state.
 
 ## Storage and task state
 
@@ -241,9 +288,9 @@ runtime/tasks/<task_id>/
 All directory and file names are generated or resolved by the server. Uploaded
 filenames are metadata and are never used directly as filesystem paths.
 
-This MVP runs as one application process. Task status is lost when the container
-restarts, and unfinished files may remain under `runtime/`. This is an accepted
-limitation rather than a reason to add a database, queue, or cleanup service.
+This MVP runs as one application process. The consequences of process-local
+state and storage are recorded explicitly under **Accepted limitations** rather
+than addressed with infrastructure outside the assignment scope.
 
 ## Validation and errors
 
@@ -275,7 +322,16 @@ Do not log API keys, image bytes, complete prompts, or uploaded JSON payloads.
 
 ```text
 src/app/
-  main.py             FastAPI app, endpoints, and in-memory task registry
+  api/
+    __init__.py       Public router exports
+    routes.py         Unversioned operational routes
+    v1/
+      __init__.py     Public v1 router export
+      routes.py       Versioned task endpoints and request validation
+  config/
+    __init__.py       Public configuration exports
+    settings.py       Environment loading and validated application settings
+  main.py             Composition root and in-memory task registry
   models.py           Request, task, and evaluation models
   workflow.py         Two-image orchestration and single repair loop
   openai_service.py   Image-editing and evaluation calls
@@ -285,11 +341,15 @@ tests/
 Dockerfile
 pyproject.toml
 README.md
-DESIGN_MVP.md
+DESIGN.md
+.github/workflows/ci.yml
 ```
 
-Four small application modules are enough. Additional repositories, domain
+These small application concerns are enough. The `api/` and `config/` packages
+make active boundaries visually explicit, but additional repositories, domain
 layers, dependency-injection frameworks, and provider abstractions are excluded.
+Package `__init__.py` files expose only the routers or settings used by callers;
+callers do not depend on internal file layout.
 
 ## Tests
 
@@ -305,11 +365,17 @@ The default test suite uses a fake OpenAI service and covers:
 One optional, explicitly enabled smoke test may call the real OpenAI API with a
 single supplied creative.
 
+Ruff provides formatting and linting, mypy checks the typed application code,
+and pytest verifies behavior. These tools are configured in `pyproject.toml` and
+run in one small CI workflow. The real-API smoke test is excluded from CI.
+
 ## Container
 
-The Dockerfile installs the locked Python dependencies, copies the application,
-creates the runtime directory, and starts one Uvicorn worker. A single worker is
-intentional because task state is stored in memory.
+The Dockerfile uses a small pinned Python base image, installs from the lockfile,
+copies only required application files, creates a writable runtime directory,
+and runs as a non-root user. It starts one Uvicorn worker because task state is
+stored in memory. `.dockerignore` keeps local environments, caches, runtime
+artifacts, and secrets out of the build context.
 
 Docker Compose, Redis, PostgreSQL, a separate worker container, and cloud object
 storage are not required.
@@ -327,8 +393,27 @@ storage are not required.
 - Pixel-perfect proof that logos, faces, products, or typography are unchanged.
 - Production deployment infrastructure, metrics, or tracing.
 
-The evaluator's brand-compliance decision is a model judgment, not a guarantee.
-This limitation should be stated clearly in the README and technical discussion.
+## Accepted limitations
+
+These are deliberate tradeoffs for the interview MVP and should be stated in
+the README and technical discussion:
+
+- Task state is process-local. A restart loses task status and interrupts
+  pending or running work; tasks are not resumed.
+- The service runs one process with one worker. It does not support horizontal
+  scaling or coordinate work across instances.
+- Inputs and variants use local disk. Artifacts are not durable, and task
+  directories are not removed automatically.
+- A technical failure in either image pipeline fails the whole task. There is
+  no partial-success response or automatic provider retry.
+- Image generation and visual evaluation are probabilistic. A passing brand
+  evaluation is a model judgment, not pixel-perfect proof of compliance.
+- Each request is limited to two creatives, one initial variant per creative,
+  and at most one repair; the service does not search for the best of several
+  candidates.
+- There is no authentication or tenant isolation, so this service is intended
+  for a controlled demo environment rather than public deployment.
+- Swagger UI is the only user interface, and clients must poll for completion.
 
 ## Acceptance criteria
 
@@ -342,3 +427,6 @@ The MVP is complete when:
 - Every recommendation and brand criterion appears in the evaluation result.
 - At most one repair is attempted per image.
 - Automated tests pass without network access or an API key.
+- Formatting, linting, and static type checks pass locally and in CI.
+- The container runs as a non-root user with dependencies installed from the
+  committed lockfile.
