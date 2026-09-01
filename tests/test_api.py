@@ -51,10 +51,13 @@ class RecordingService:
         return make_evaluation(recommendations, brand_guidelines, passes)
 
 
-def test_health_and_openapi_expose_contract(tmp_path):
+def test_health_swagger_and_openapi_expose_contract(tmp_path):
     client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
 
     assert client.get("/health").json() == {"status": "ok"}
+    swagger_response = client.get("/docs")
+    assert swagger_response.status_code == 200
+    assert "Swagger UI" in swagger_response.text
     schema = client.get("/openapi.json").json()
     assert {
         TASKS_PATH,

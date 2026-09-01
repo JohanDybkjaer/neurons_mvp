@@ -13,7 +13,12 @@ def create_app(
     service: OpenAIService | None = None,
     config: AppConfig | None = None,
 ) -> FastAPI:
-    application = FastAPI(title="Visual Recommendations MVP", version="1.0.0")
+    application = FastAPI(
+        title="Visual Recommendations MVP",
+        version="1.0.0",
+        docs_url="/docs",
+        openapi_url="/openapi.json",
+    )
     application.state.tasks: dict[str, TaskState] = {}
     application.state.variant_paths: dict[str, dict[str, Path]] = {}
     application.state.service = service or OpenAIService()

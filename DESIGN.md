@@ -61,7 +61,9 @@ to split them.
 
 ## API
 
-FastAPI generates the OpenAPI schema and Swagger UI at `/docs`.
+FastAPI exposes the interactive Swagger UI at `/docs` and its generated OpenAPI
+schema at `/openapi.json`. Swagger UI is the demo interface for submitting the
+multipart request and inspecting the polling endpoints.
 
 All task endpoints are versioned under `/api/v1`. The operational health check
 is deliberately unversioned because it reports whether this service process is
