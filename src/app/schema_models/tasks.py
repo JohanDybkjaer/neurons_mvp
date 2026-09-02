@@ -22,25 +22,51 @@ class TaskStatus(str, Enum):
 class ImageResult(BaseModel):
     """Final variant metadata and evaluation for one creative."""
 
-    image_id: str
-    source_filename: str
-    variant_url: str
-    attempts: int = Field(ge=1, le=MAX_ITERATIONS)
-    evaluation: Evaluation
+    image_id: str = Field(
+        description="Server-generated artifact identifier.", examples=["image_1"]
+    )
+    source_filename: str = Field(
+        description="Original upload name retained as response metadata.",
+        examples=["creative_1.png"],
+    )
+    variant_url: str = Field(
+        description="Endpoint that serves the final generated image.",
+        examples=["/api/v1/tasks/<task_id>/variants/image_1"],
+    )
+    attempts: int = Field(
+        ge=1,
+        le=MAX_ITERATIONS,
+        description="Actual generation-and-evaluation pairs performed.",
+        examples=[1],
+    )
+    evaluation: Evaluation = Field(
+        description="Final validated result, whether it passes or fails."
+    )
 
 
 class TaskState(BaseModel):
     """Mutable process-local state returned by the polling endpoint."""
 
-    task_id: str
-    status: TaskStatus
-    results: list[ImageResult] = Field(default_factory=list)
-    error: str | None = None
+    task_id: str = Field(description="Server-generated task identifier.")
+    status: TaskStatus = Field(description="Current task lifecycle state.")
+    results: list[ImageResult] = Field(
+        default_factory=list,
+        description="Final per-image results after all pipelines finish.",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Safe technical error message when the task fails.",
+    )
 
 
 class TaskCreated(BaseModel):
     """Acknowledgement returned when background processing is scheduled."""
 
-    task_id: str
-    status: TaskStatus
-    status_url: str
+    task_id: str = Field(description="Server-generated task identifier.")
+    status: TaskStatus = Field(
+        description="Pending lifecycle state returned by a successful POST."
+    )
+    status_url: str = Field(
+        description="Polling endpoint for lifecycle state and final results.",
+        examples=["/api/v1/tasks/<task_id>"],
+    )

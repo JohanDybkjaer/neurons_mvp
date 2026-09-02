@@ -21,7 +21,7 @@ def _editing_prompt(
     brand_guidelines: BrandGuidelines,
     repair_feedback: Evaluation | None,
 ) -> str:
-    """Build one direct edit request with authoritative brand constraints."""
+    """Build an edit prompt with original constraints and optional repair feedback."""
 
     sections = [
         "Edit the supplied original marketing creative in one pass.",
@@ -72,7 +72,7 @@ def _evaluation_prompt(
     recommendations: list[Recommendation],
     brand_guidelines: BrandGuidelines,
 ) -> str:
-    """Build one evaluator request containing every required check."""
+    """Build an evaluator prompt requiring every requested check."""
 
     return "\n\n".join(
         [
@@ -98,13 +98,13 @@ def _evaluation_prompt(
 
 
 def _media_type(path: Path) -> str:
-    """Return the validated image media type represented by a task path."""
+    """Return the media type for a validated PNG or JPEG task artifact."""
 
     return "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
 
 
 def _data_url(image_bytes: bytes, path: Path) -> str:
-    """Encode one local image for a Responses vision input."""
+    """Encode one local image for a Responses vision input into base 64."""
 
     encoded = base64.b64encode(image_bytes).decode("ascii")
     return f"data:{_media_type(path)};base64,{encoded}"
@@ -115,6 +115,11 @@ class OpenAIService:
 
     The caller owns the client lifecycle. ``create_app`` creates and closes the
     production client, while tests inject a deterministic stand-in.
+
+    Args:
+        client: Long-lived asynchronous OpenAI client supplied by the caller.
+        image_model: Configured model name for image editing.
+        evaluation_model: Configured vision-capable model name for evaluation.
     """
 
     def __init__(
@@ -137,13 +142,21 @@ class OpenAIService:
     ) -> None:
         """Edit the original creative and persist the returned image bytes.
 
-        ``repair_feedback`` is already schema- and coverage-validated by the
-        workflow. When present, it augments the prompt but never changes the
-        source image.
+        Args:
+            original_path: Server-owned source creative for this iteration.
+            destination_path: Server-owned path for the returned variant bytes.
+            recommendations: Every original requested change.
+            brand_guidelines: Authoritative visual constraints.
+            repair_feedback: Latest schema- and coverage-validated failed
+                evaluation, when making a repair attempt.
+
+        Returns:
+            ``None`` after writing returned image bytes to ``destination_path``.
 
         Raises:
             ValueError: If the provider omits image data or returns invalid
                 base64 content.
+
         """
 
         original_bytes = await asyncio.to_thread(original_path.read_bytes)
@@ -184,9 +197,15 @@ class OpenAIService:
     ) -> Evaluation:
         """Compare both images and return one structured result for all checks.
 
-        The Responses SDK parses against ``Evaluation``. The workflow performs
-        the additional semantic check that returned IDs and criteria exactly
-        cover the request.
+        Args:
+            original_path: Server-owned source creative used for comparison.
+            variant_path: Generated variant to evaluate against the source.
+            recommendations: Every original requested change.
+            brand_guidelines: Authoritative criteria to check.
+
+        Returns:
+            Parsed ``Evaluation`` containing decisions for every requested check.
+
         """
 
         original_bytes, variant_bytes = await asyncio.gather(

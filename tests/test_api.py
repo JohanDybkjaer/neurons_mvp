@@ -95,7 +95,20 @@ def test_health_swagger_and_openapi_expose_contract(tmp_path):
     assert upload_properties["images"]["items"]["format"] == "binary"
     assert upload_properties["recommendations"]["format"] == "binary"
     assert upload_properties["brand_guidelines"]["format"] == "binary"
-    assert schema["paths"][TASKS_PATH]["post"]["responses"]["202"]
+    create_operation = schema["paths"][TASKS_PATH]["post"]
+    assert create_operation["summary"] == "Start visual recommendation processing"
+    assert create_operation["responses"]["202"]["description"] == (
+        "Accepted task with a polling URL"
+    )
+    task_created_schema = schema["components"]["schemas"]["TaskCreated"]
+    assert task_created_schema["properties"]["status_url"]["description"] == (
+        "Polling endpoint for lifecycle state and final results."
+    )
+    evaluation_schema = schema["components"]["schemas"]["Evaluation"]
+    assert evaluation_schema["properties"]["overall_pass"]["description"] == (
+        "True only when every recommendation and brand check passes."
+    )
+    assert evaluation_schema["examples"][0]["overall_pass"] is True
 
 
 def test_ten_image_task_completes_with_retrievable_variants(

@@ -26,6 +26,8 @@ from app.schema_models import MAX_ITERATIONS
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+# Input ``2`` permits one initial generation/evaluation pair and one repair;
+# strict validation rejects booleans and strings such as ``"2"``.
 IterationCount = Annotated[StrictInt, Field(ge=1, le=MAX_ITERATIONS)]
 
 
@@ -64,7 +66,9 @@ class AppConfig(_ConfigModel):
     """Immutable settings resolved from configuration and secret sources.
 
     The object is intentionally flat so consumers do not depend on how values
-    are grouped in TOML.
+    are grouped in TOML. Input ``max_image_size_mb = 10`` becomes output
+    ``max_image_bytes = 10485760`` here. Input ``max_iterations = 2`` permits
+    one initial generation and at most one repair per image.
     """
 
     openai_api_key: SecretStr
@@ -109,6 +113,11 @@ def validate_config(
 
     Raises:
         RuntimeError: If a section, field, value, or secret is invalid.
+
+    Example:
+        Input ``[limits] max_image_size_mb = 10`` becomes an ``AppConfig`` with
+        ``max_image_bytes == 10485760``. Upload handling therefore has no TOML
+        unit conversion of its own.
     """
 
     try:

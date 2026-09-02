@@ -54,6 +54,37 @@ creative and the latest failed checks as feedback; it never edits an earlier
 generated variant. Configuration may request up to five iterations, and the
 workflow enforces that same hard limit for direct callers.
 
+## Upload document format
+
+`POST /api/v1/tasks` receives the image files plus two JSON documents. Each
+document is a JSON object whose outer labels are arbitrary. Its entries are
+joined to the uploads by their `filename` values, which must exactly match every
+uploaded filename once. The committed [recommendations example](/Users/johan/source_countrol/neurons_mvp/examples/demo/recommendations.json) and [brand-guidelines example](/Users/johan/source_countrol/neurons_mvp/examples/demo/brand_guidelines.json) show the complete two-image form.
+
+For an uploaded `creative_1.png`, this is the input shape for
+`recommendations.json`:
+
+```json
+{
+  "image1": {
+    "filename": "creative_1.png",
+    "recommendations": [
+      {
+        "id": "rec_1",
+        "title": "Add a focal accent",
+        "description": "Add a small red circle below the headline.",
+        "type": "composition"
+      }
+    ]
+  }
+}
+```
+
+`brand_guidelines.json` uses the same outer label and filename, replacing
+`recommendations` with one `brand_guidelines` object. Each protected region and
+each of the typography, aspect-ratio, and brand-elements values becomes a
+separate evaluator check in the task output.
+
 ## Code map
 
 - `api/` validates HTTP input and exposes health and task routes.

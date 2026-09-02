@@ -35,7 +35,7 @@ BINARY_FILE_SCHEMA = {"type": "string", "format": "binary"}
 
 
 def _decode_image(image_bytes: bytes) -> str:
-    """Decode an upload and return its server-owned file suffix."""
+    """Decode valid PNG/JPEG bytes and return the server-owned file suffix."""
 
     try:
         with Image.open(io.BytesIO(image_bytes)) as image:
@@ -56,7 +56,7 @@ async def _parse_json_upload(
     model_type: type[ModelType],
     label: str,
 ) -> ModelType:
-    """Parse an uploaded JSON document into its boundary model."""
+    """Parse one uploaded JSON document or return a safe HTTP 422 response."""
 
     try:
         content = await upload.read()
@@ -72,7 +72,7 @@ def _index_by_filename(
     entries: list[FilenameEntry],
     label: str,
 ) -> dict[str, FilenameEntry]:
-    """Index document entries while rejecting ambiguous filenames."""
+    """Index parsed entries by filename and reject duplicate join keys."""
 
     indexed = {entry.filename: entry for entry in entries}
     if len(indexed) != len(entries):
@@ -88,7 +88,7 @@ def _validate_filename_matches(
     recommendations: dict[str, RecommendationFile],
     guidelines: dict[str, BrandGuidelineFile],
 ) -> None:
-    """Require an exact one-to-one match across all uploaded filenames."""
+    """Require JSON entries to match uploaded image filenames exactly once."""
 
     expected = set(filenames)
     if len(expected) != len(filenames):
@@ -211,7 +211,7 @@ async def submit_task(
 
 
 def read_task(request: Request, task_id: str) -> TaskState:
-    """Return a task from process-local state or a safe not-found response."""
+    """Return a process-local task or a safe not-found response."""
 
     task = request.app.state.tasks.get(task_id)
     if task is None:
@@ -222,7 +222,7 @@ def read_task(request: Request, task_id: str) -> TaskState:
 
 
 def serve_variant(request: Request, task_id: str, image_id: str) -> FileResponse:
-    """Resolve a completed artifact using server-owned identifiers."""
+    """Serve a completed artifact through server-owned task and image IDs."""
 
     task = request.app.state.tasks.get(task_id)
     variant_path = request.app.state.variant_paths.get(task_id, {}).get(image_id)

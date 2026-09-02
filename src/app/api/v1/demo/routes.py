@@ -34,6 +34,8 @@ async def _load_demo_upload(filename: str) -> UploadFile:
     "/tasks",
     response_model=TaskCreated,
     status_code=status.HTTP_202_ACCEPTED,
+    summary="Start the bundled visual recommendation demo",
+    response_description="Accepted demo task with a polling URL",
 )
 async def create_demo_task(
     request: Request,
@@ -68,9 +70,9 @@ async def create_demo_task(
 ) -> TaskCreated:
     """Run the demo bundle, optionally replacing any multipart input field.
 
-    Execute the request with no files to use both bundled creatives and their
-    matching JSON documents. Selecting a field in Swagger replaces that field's
-    default while preserving the normal validation rules.
+    Execute without files to use both bundled creatives and their matching JSON
+    documents. Supplying a field replaces only that default while preserving the
+    same validation, workflow, and polling behavior as the product endpoint.
     """
 
     owned_uploads: list[UploadFile] = []
@@ -105,19 +107,28 @@ async def create_demo_task(
             await upload.close()
 
 
-@router.get("/tasks/{task_id}", response_model=TaskState)
+@router.get(
+    "/tasks/{task_id}",
+    response_model=TaskState,
+    summary="Poll a demo task",
+    response_description="Current demo task state and final results when available",
+)
 async def get_demo_task(request: Request, task_id: str) -> TaskState:
-    """Return the current state of a demo task."""
+    """Return the current lifecycle state and final results of a demo task."""
 
     return read_task(request, task_id)
 
 
-@router.get("/tasks/{task_id}/variants/{image_id}")
+@router.get(
+    "/tasks/{task_id}/variants/{image_id}",
+    summary="Retrieve a completed demo variant",
+    response_description="Generated PNG or JPEG demo variant",
+)
 async def get_demo_variant(
     request: Request,
     task_id: str,
     image_id: str,
 ) -> FileResponse:
-    """Return a completed variant created through the demo API."""
+    """Return the stored PNG or JPEG for a completed demo image result."""
 
     return serve_variant(request, task_id, image_id)

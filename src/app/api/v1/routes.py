@@ -22,6 +22,8 @@ router = APIRouter(prefix=API_V1_PREFIX, tags=["tasks"])
     "/tasks",
     response_model=TaskCreated,
     status_code=status.HTTP_202_ACCEPTED,
+    summary="Start visual recommendation processing",
+    response_description="Accepted task with a polling URL",
 )
 async def create_task(
     request: Request,
@@ -48,7 +50,12 @@ async def create_task(
         ),
     ],
 ) -> TaskCreated:
-    """Validate required uploads and schedule asynchronous processing."""
+    """Start asynchronous processing for matching multipart uploads.
+
+    - Upload one to ten PNG or JPEG creatives.
+    - Supply recommendation and brand-guideline JSON entries for every filename.
+    - Poll the returned URL for final evaluations and generated-variant URLs.
+    """
 
     return await submit_task(
         request,
@@ -60,19 +67,35 @@ async def create_task(
     )
 
 
-@router.get("/tasks/{task_id}", response_model=TaskState)
+@router.get(
+    "/tasks/{task_id}",
+    response_model=TaskState,
+    summary="Poll a visual recommendation task",
+    response_description="Current task state and final results when available",
+)
 async def get_task(request: Request, task_id: str) -> TaskState:
-    """Return the current state of a normally submitted task."""
+    """Return the current task lifecycle state and final results when complete.
+
+    Completed image results include the actual iteration count, evaluation, and
+    generated-variant URL. Unknown task IDs return HTTP 404.
+    """
 
     return read_task(request, task_id)
 
 
-@router.get("/tasks/{task_id}/variants/{image_id}")
+@router.get(
+    "/tasks/{task_id}/variants/{image_id}",
+    summary="Retrieve a completed generated variant",
+    response_description="Generated PNG or JPEG variant",
+)
 async def get_variant(
     request: Request,
     task_id: str,
     image_id: str,
 ) -> FileResponse:
-    """Return a completed variant for a normally submitted task."""
+    """Return the stored PNG or JPEG for a completed image result.
+
+    Unfinished, missing, and unknown artifacts return the same HTTP 404 response.
+    """
 
     return serve_variant(request, task_id, image_id)
