@@ -13,7 +13,7 @@ from app.schema_models.inputs import (
     RecommendationFile,
     RecommendationsDocument,
 )
-from app.schema_models.misc import HealthResponse
+from app.schema_models.misc import CodedErrorResponse, HealthResponse
 from app.schema_models.tasks import (
     ImageResult,
     MAX_ITERATIONS,
@@ -27,6 +27,7 @@ __all__ = [
     "BrandGuidelineFile",
     "BrandGuidelines",
     "BrandGuidelinesDocument",
+    "CodedErrorResponse",
     "Evaluation",
     "HealthResponse",
     "ImageResult",

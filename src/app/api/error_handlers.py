@@ -10,9 +10,12 @@ from fastapi.exception_handlers import (
     request_validation_exception_handler as default_request_validation_exception_handler,
 )
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
+
+from app.schema_models import CodedErrorResponse
 
 LOGGER = logging.getLogger(__name__)
+FILENAME_SET_MISMATCH_CODE = "image_json_filename_set_mismatch"
 UPLOAD_FIELD_NAMES = frozenset(
     {"images", "recommendations", "brand_guidelines"}
 )
@@ -22,7 +25,7 @@ VALIDATION_REJECTION_REASONS = {
     "Duplicate filename in recommendations JSON.": "duplicate_recommendation_filename",
     "Duplicate filename in brand guidelines JSON.": "duplicate_brand_guideline_filename",
     "Image filenames must be unique.": "duplicate_image_filename",
-    "JSON filenames must match the uploaded images.": "json_filename_mismatch",
+    "JSON filenames must match the uploaded images.": FILENAME_SET_MISMATCH_CODE,
     "Upload between one and ten images.": "image_count_out_of_range",
     "Image exceeds the upload size limit.": "image_too_large",
     "Images must be valid PNG or JPEG files.": "invalid_image",
@@ -91,6 +94,7 @@ async def handle_http_exception(request: Request, error: HTTPException) -> Respo
     """Log safe metadata for application-raised validation rejections."""
 
     if error.status_code == 422:
+        reason = _validation_rejection_reason(error)
         LOGGER.info(
             (
                 "event=request_rejected route=%s method=%s status_code=422 "
@@ -98,6 +102,16 @@ async def handle_http_exception(request: Request, error: HTTPException) -> Respo
             ),
             _route_template(request),
             request.method,
-            _validation_rejection_reason(error),
+            reason,
         )
+        if (
+            reason == FILENAME_SET_MISMATCH_CODE
+            and isinstance(error.detail, str)
+        ):
+            response = CodedErrorResponse(detail=error.detail, code=reason)
+            return JSONResponse(
+                status_code=error.status_code,
+                content=response.model_dump(),
+                headers=error.headers,
+            )
     return await default_http_exception_handler(request, error)

@@ -355,9 +355,10 @@ def test_mismatched_filenames_are_rejected(
 
     assert response.status_code == 422
     assert response.json() == {
-        "detail": "JSON filenames must match the uploaded images."
+        "detail": "JSON filenames must match the uploaded images.",
+        "code": "image_json_filename_set_mismatch",
     }
-    assert "reason=json_filename_mismatch" in log_file.read_text()
+    assert "reason=image_json_filename_set_mismatch" in log_file.read_text()
 
 
 def test_more_than_ten_images_are_rejected(

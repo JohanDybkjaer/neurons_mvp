@@ -406,6 +406,9 @@ Validation is intentionally limited to inexpensive system-boundary checks:
 FastAPI/Pydantic validation errors return `422`. An OpenAI or unexpected
 workflow exception marks the task as `failed` with a short safe message. The
 service does not add retries, exception taxonomies, or partial-success rules.
+The known image/JSON filename-set mismatch also returns the stable code
+`image_json_filename_set_mismatch` so clients can correct partial demo
+overrides without parsing prose.
 
 ## Logging
 
