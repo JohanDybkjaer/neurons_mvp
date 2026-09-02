@@ -19,10 +19,37 @@ NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_len
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
-class AppConfig(BaseModel):
-    """Immutable provider, runtime-limit, and filesystem settings."""
-
+class _ConfigModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class _ProviderConfig(_ConfigModel):
+    image_editor_model: NonEmptyString
+    evaluator_model: NonEmptyString
+    timeout_seconds: PositiveFloat
+
+
+class _LimitsConfig(_ConfigModel):
+    max_image_size_mb: PositiveInt
+
+
+class _LoggingConfig(_ConfigModel):
+    level: NonEmptyString
+
+
+class _StorageConfig(_ConfigModel):
+    artifact_root: Path
+
+
+class _ConfigDocument(_ConfigModel):
+    providers: _ProviderConfig
+    limits: _LimitsConfig
+    logging: _LoggingConfig
+    storage: _StorageConfig
+
+
+class AppConfig(_ConfigModel):
+    """Immutable settings resolved from configuration and secret sources."""
 
     openai_api_key: SecretStr
     image_model: NonEmptyString
@@ -50,9 +77,6 @@ class AppConfig(BaseModel):
         return value.strip().upper() if isinstance(value, str) else value
 
 
-CONFIG_KEYS = frozenset(AppConfig.model_fields) - {"openai_api_key"}
-
-
 def validate_config(
     config_values: Mapping[str, object],
     api_key: object,
@@ -60,13 +84,15 @@ def validate_config(
     """Validate a complete non-secret document plus its separately loaded key."""
 
     try:
-        if set(config_values) != CONFIG_KEYS:
-            raise ValueError("Configuration document does not match the schema")
-        return AppConfig.model_validate(
-            {
-                **config_values,
-                "openai_api_key": api_key,
-            }
+        document = _ConfigDocument.model_validate(config_values)
+        return AppConfig(
+            openai_api_key=api_key,
+            image_model=document.providers.image_editor_model,
+            evaluation_model=document.providers.evaluator_model,
+            log_level=document.logging.level,
+            runtime_root=document.storage.artifact_root,
+            max_image_bytes=document.limits.max_image_size_mb * 1024 * 1024,
+            provider_timeout_seconds=document.providers.timeout_seconds,
         )
-    except (ValidationError, ValueError):
+    except ValidationError:
         raise RuntimeError("Invalid application configuration.") from None

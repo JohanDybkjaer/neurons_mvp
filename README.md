@@ -20,6 +20,10 @@ complete root-level `config/dev.toml` and `config/test.toml` files. The Python
 `src/app/config/` package only loads and validates the selected file; it does
 not define another set of defaults.
 
+Each TOML groups the active settings under `providers`, `limits`, `logging`,
+and `storage` sections. Workflow invariants are intentionally not exposed as
+configuration.
+
 Select exactly one configuration document through `APP_CONFIG_FILE`:
 
 ```shell

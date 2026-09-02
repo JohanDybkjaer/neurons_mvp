@@ -344,8 +344,8 @@ def test_missing_runtime_configuration_fails_startup_safely(monkeypatch, tmp_pat
     config_file = tmp_path / "config.toml"
     config_file.write_text(
         (Path("config/dev.toml").read_text()).replace(
-            'image_model = "gpt-image-2"',
-            'image_model = ""',
+            'image_editor_model = "gpt-image-2"',
+            'image_editor_model = ""',
         )
     )
 

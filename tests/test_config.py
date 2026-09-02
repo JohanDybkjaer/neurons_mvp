@@ -20,12 +20,19 @@ def write_config(path: Path, **overrides: object) -> Path:
         **overrides,
     }
     lines = [
-        f'image_model = {values["image_model"]!r}',
-        f'evaluation_model = {values["evaluation_model"]!r}',
-        f'log_level = {values["log_level"]!r}',
-        f'runtime_root = {values["runtime_root"]!r}',
-        f'max_image_bytes = {values["max_image_bytes"]}',
-        f'provider_timeout_seconds = {values["provider_timeout_seconds"]}',
+        "[providers]",
+        f'image_editor_model = {values["image_model"]!r}',
+        f'evaluator_model = {values["evaluation_model"]!r}',
+        f'timeout_seconds = {values["provider_timeout_seconds"]}',
+        "",
+        "[limits]",
+        f'max_image_size_mb = {values["max_image_bytes"] / 1024 / 1024:g}',
+        "",
+        "[logging]",
+        f'level = {values["log_level"]!r}',
+        "",
+        "[storage]",
+        f'artifact_root = {values["runtime_root"]!r}',
     ]
     path.write_text("\n".join(lines))
     return path
@@ -50,6 +57,7 @@ def test_load_config_reads_non_secrets_only_from_toml(tmp_path):
     assert config.evaluation_model == "custom-evaluation-model"
     assert config.log_level == "DEBUG"
     assert str(config.runtime_root) == "runtime/tasks"
+    assert config.max_image_bytes == 10 * 1024 * 1024
 
 
 @pytest.mark.parametrize(

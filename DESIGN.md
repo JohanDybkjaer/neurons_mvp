@@ -259,12 +259,19 @@ the application loads exactly the path supplied through `APP_CONFIG_FILE` and
 does not merge files or branch on an environment name:
 
 ```toml
-image_model = "gpt-image-2"
-evaluation_model = "gpt-5.6"
-log_level = "INFO"
-runtime_root = "runtime/tasks"
-max_image_bytes = 10485760
-provider_timeout_seconds = 120
+[providers]
+image_editor_model = "gpt-image-2"
+evaluator_model = "gpt-5.6"
+timeout_seconds = 120
+
+[limits]
+max_image_size_mb = 10
+
+[logging]
+level = "INFO"
+
+[storage]
+artifact_root = "runtime/tasks"
 ```
 
 The only secret setting is `OPENAI_API_KEY`. `.env.example` documents that name
@@ -282,6 +289,10 @@ with a concise error when no file is selected, or when the selected file is
 missing, malformed, incomplete, or contains unknown settings.
 Tests can construct `AppConfig` directly or pass explicit file paths without
 mutating process-wide environment state.
+
+Only values that are genuinely adjustable are exposed. The two-image limit,
+two-pipeline concurrency bound, and single repair attempt remain workflow
+invariants rather than environment-specific configuration.
 
 ## Storage and task state
 
