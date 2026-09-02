@@ -75,7 +75,8 @@ running rather than exposing a product API contract.
 Starts an asynchronous visual-recommendation task.
 
 The request uses `multipart/form-data` so it can be submitted directly through
-Swagger UI.
+Swagger UI. Every upload field is described as a binary file in OpenAPI, so the
+interactive form presents system file pickers rather than text inputs.
 
 | Field | Type | Description |
 | --- | --- | --- |

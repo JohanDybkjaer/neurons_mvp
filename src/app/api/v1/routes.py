@@ -39,6 +39,10 @@ router = APIRouter(prefix=API_V1_PREFIX, tags=["tasks"])
 ModelType = TypeVar("ModelType", bound=BaseModel)
 FilenameEntry = TypeVar("FilenameEntry", RecommendationFile, BrandGuidelineFile)
 
+# Swagger UI uses OpenAPI's binary format marker to render operating-system
+# file pickers. Pydantic otherwise emits only contentMediaType for UploadFile.
+BINARY_FILE_SCHEMA = {"type": "string", "format": "binary"}
+
 
 def _decode_image(image_bytes: bytes) -> str:
     """Decode an upload and return its server-owned file suffix."""
@@ -118,13 +122,25 @@ async def create_task(
     request: Request,
     background_tasks: BackgroundTasks,
     images: Annotated[
-        list[UploadFile], File(description="One or two PNG/JPEG creatives")
+        list[UploadFile],
+        File(
+            description="One or two PNG/JPEG creatives",
+            json_schema_extra={"items": BINARY_FILE_SCHEMA},
+        ),
     ],
     recommendations: Annotated[
-        UploadFile, File(description="Recommendations JSON file")
+        UploadFile,
+        File(
+            description="Recommendations JSON file",
+            json_schema_extra=BINARY_FILE_SCHEMA,
+        ),
     ],
     brand_guidelines: Annotated[
-        UploadFile, File(description="Brand guidelines JSON file")
+        UploadFile,
+        File(
+            description="Brand guidelines JSON file",
+            json_schema_extra=BINARY_FILE_SCHEMA,
+        ),
     ],
 ) -> TaskCreated:
     """Validate uploads, persist inputs, and schedule asynchronous processing.

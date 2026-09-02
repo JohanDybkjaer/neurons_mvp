@@ -88,6 +88,12 @@ def test_health_swagger_and_openapi_expose_contract(tmp_path):
         "content"
     ]
     assert "multipart/form-data" in request_content
+    body_reference = request_content["multipart/form-data"]["schema"]["$ref"]
+    body_name = body_reference.rsplit("/", maxsplit=1)[-1]
+    upload_properties = schema["components"]["schemas"][body_name]["properties"]
+    assert upload_properties["images"]["items"]["format"] == "binary"
+    assert upload_properties["recommendations"]["format"] == "binary"
+    assert upload_properties["brand_guidelines"]["format"] == "binary"
     assert schema["paths"][TASKS_PATH]["post"]["responses"]["202"]
 
 
