@@ -12,6 +12,7 @@ from openai import AsyncOpenAI
 from app.ai_services import OpenAIService
 from app.api import health_router
 from app.api.v1 import router as v1_router
+from app.api.v1.demo import router as demo_router
 from app.config import AppConfig, load_config
 from app.schema_models import TaskState
 
@@ -103,6 +104,7 @@ def create_app(
     application.state.config = config
     application.include_router(health_router)
     application.include_router(v1_router)
+    application.include_router(demo_router)
     return application
 
 

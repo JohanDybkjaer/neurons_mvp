@@ -54,3 +54,17 @@ workflow directly.
 
 With the server running, open `http://127.0.0.1:8000/docs` for the interactive
 Swagger UI.
+
+## Demo
+
+The unchanged assignment inputs are committed under `examples/demo/`. In
+Swagger, open `POST /api/v1/demo/tasks`, click **Try it out**, and execute the
+request without selecting files. The demo endpoint supplies both creatives and
+the matching JSON documents automatically.
+
+Each form field remains optional and editable: selecting images,
+recommendations, or brand guidelines replaces that bundled default. The normal
+`POST /api/v1/tasks` endpoint continues to require all uploads.
+
+The endpoint uses the configured AI provider and may incur API costs;
+automated tests use a fake service instead.

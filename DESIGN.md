@@ -146,6 +146,22 @@ resolved only within the corresponding task directory.
 
 Returns `{"status": "ok"}` when the process is running.
 
+## Demo API
+
+The demo router mirrors the task lifecycle under `/api/v1/demo` while using the
+committed files in `examples/demo/` as defaults:
+
+- `POST /api/v1/demo/tasks`
+- `GET /api/v1/demo/tasks/{task_id}`
+- `GET /api/v1/demo/tasks/{task_id}/variants/{image_id}`
+
+The POST request remains `multipart/form-data`, but its image,
+recommendations, and brand-guideline uploads are optional. Omitting a field
+uses the corresponding committed demo file or files. Supplying that field
+replaces the default, so the Swagger form remains manually editable. Demo tasks
+use the same validation, workflow, in-memory state, and artifact storage as the
+versioned product API; the demo router adds no alternate processing behavior.
+
 ## Asynchronous execution and parallelism
 
 The HTTP request must not wait for image generation. `POST /api/v1/tasks`
@@ -349,9 +365,13 @@ src/app/
   api/
     __init__.py       Public router exports
     routes.py         Unversioned operational routes
+    task_operations.py Shared upload validation, task creation, and retrieval
     v1/
       __init__.py     Public v1 router export
       routes.py       Versioned task endpoints and request validation
+      demo/
+        __init__.py   Public v1 demo router export
+        routes.py     Default-backed v1 demo task endpoints
   config/
     __init__.py       Public configuration exports
     load_config.py    TOML selection plus secret loading
@@ -371,10 +391,12 @@ src/app/
   main.py             Composition root and in-memory task registry
 tests/
   test_api.py
+  test_demo.py
   test_workflow.py
 config/
   dev.toml           Complete non-secret dev settings
   test.toml          Complete non-secret test-deployment settings
+examples/demo/       Supplied creatives and JSON demo inputs
 Dockerfile
 pyproject.toml
 README.md
