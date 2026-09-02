@@ -3,6 +3,7 @@
 import asyncio
 import io
 import json
+import logging
 from pathlib import Path
 from typing import TypeVar, cast
 from uuid import uuid4
@@ -32,6 +33,7 @@ MAX_IMAGES = 10
 # Swagger UI uses OpenAPI's binary format marker to render operating-system
 # file pickers. Pydantic otherwise emits only contentMediaType for UploadFile.
 BINARY_FILE_SCHEMA = {"type": "string", "format": "binary"}
+LOGGER = logging.getLogger(__name__)
 
 
 def _decode_image(image_bytes: bytes) -> str:
@@ -114,6 +116,7 @@ async def submit_task(
     """Validate one to ten matching uploads, persist them, and schedule processing."""
 
     app_config = cast(AppConfig, request.app.state.config)
+    LOGGER.info("event=task_submission_received image_count=%d", len(images))
     if not 1 <= len(images) <= MAX_IMAGES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -202,6 +205,11 @@ async def submit_task(
         request.app.state.service,
         app_config.provider_timeout_seconds,
         app_config.max_iterations,
+    )
+    LOGGER.info(
+        "task_id=%s image_id=all step=submission outcome=accepted image_count=%d",
+        task_id,
+        len(work_items),
     )
     return TaskCreated(
         task_id=task_id,

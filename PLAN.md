@@ -155,6 +155,8 @@ Make the small service easy to run, inspect, and discuss in the interview.
 - Add standard-library logging to stdout and a server-managed runtime log file
   for task ID, image ID, step, attempt, duration, and outcome without logging
   sensitive payloads.
+- Log safe request-validation rejection metadata without recording uploaded
+  multipart content or invalid field values.
 - Write a concise README covering:
   - Local setup with `uv`.
   - Docker build and run commands.

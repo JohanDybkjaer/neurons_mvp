@@ -411,10 +411,14 @@ service does not add retries, exception taxonomies, or partial-success rules.
 
 Use Python's standard `logging` module and write to stdout plus a
 server-managed `logs/app.log` file beside the configured artifact-root
-directory (for example, `runtime/logs/app.log`). Log only safe, operational
+directory (for example, `runtime/logs/app.log`). The file includes application
+events and Uvicorn operational/access records. Log only safe, operational
 metadata:
 
 - UTC timestamp.
+- Request method, route template, validation-rejection category, count, error
+  types, recognized multipart field names, and vetted reason codes, without
+  invalid values or multipart content.
 - Task ID and image identifier (`all` for task-wide events).
 - Workflow step, attempt number, and task image count where relevant.
 - Started, succeeded, or failed outcome.

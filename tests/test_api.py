@@ -1,5 +1,4 @@
 import json
-import logging
 import re
 import shutil
 from pathlib import Path
@@ -118,13 +117,54 @@ def test_application_creates_runtime_log_file(tmp_path):
     log_file = tmp_path.parent / "logs" / "app.log"
 
     with TestClient(create_app(config=config)):
-        logging.getLogger("app").info("logging lifecycle verified")
+        pass
 
     assert log_file.is_file()
+    log_lines = log_file.read_text().splitlines()
     assert re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z INFO app logging lifecycle verified",
-        log_file.read_text().strip(),
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z INFO app.main application started",
+        log_lines[0],
     )
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z INFO app.main application stopped",
+        log_lines[-1],
+    )
+
+
+def test_validation_rejections_are_logged_without_uploaded_content(
+    tmp_path, png_bytes
+):
+    config = make_test_config(tmp_path)
+    log_file = tmp_path.parent / "logs" / "app.log"
+
+    with TestClient(create_app(config=config)) as client:
+        missing_uploads = client.post(TASKS_PATH)
+        invalid_json = client.post(
+            TASKS_PATH,
+            files=[
+                ("images", ("creative.png", png_bytes, "image/png")),
+                (
+                    "recommendations",
+                    ("recommendations.json", "not-json", "application/json"),
+                ),
+                ("brand_guidelines", ("guidelines.json", "{}", "application/json")),
+            ],
+        )
+
+    assert missing_uploads.status_code == 422
+    assert invalid_json.status_code == 422
+    log_output = log_file.read_text()
+    assert (
+        "event=request_rejected route=/api/v1/tasks method=POST status_code=422 "
+        "category=request_validation error_count=3 error_types=missing "
+        "fields=brand_guidelines,images,recommendations"
+    ) in log_output
+    assert (
+        "event=request_rejected route=/api/v1/tasks method=POST status_code=422 "
+        "category=application_validation error_count=0 "
+        "reason=invalid_recommendations_json"
+    ) in log_output
+    assert "creative.png" not in log_output
 
 
 def test_ten_image_task_completes_with_retrievable_variants(
@@ -305,16 +345,19 @@ def test_mismatched_filenames_are_rejected(
         png_bytes, recommendations, brand_guidelines, ("different.png",)
     )
     images = [("images", ("creative.png", png_bytes, "image/png"))]
-    client = TestClient(create_app(config=make_test_config(tmp_path)))
+    config = make_test_config(tmp_path)
+    log_file = tmp_path.parent / "logs" / "app.log"
 
-    response = client.post(
-        TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
-    )
+    with TestClient(create_app(config=config)) as client:
+        response = client.post(
+            TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
+        )
 
     assert response.status_code == 422
     assert response.json() == {
         "detail": "JSON filenames must match the uploaded images."
     }
+    assert "reason=json_filename_mismatch" in log_file.read_text()
 
 
 def test_more_than_ten_images_are_rejected(

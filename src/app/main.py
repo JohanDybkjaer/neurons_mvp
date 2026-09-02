@@ -7,20 +7,24 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
 from openai import AsyncOpenAI
 
 from app.ai_services import OpenAIService
 from app.api import health_router
+from app.api.error_handlers import handle_http_exception, handle_request_validation_error
 from app.api.v1 import router as v1_router
 from app.api.v1.demo import router as demo_router
 from app.config import AppConfig, load_config
 from app.schema_models import TaskState
 
+LOGGER = logging.getLogger(__name__)
+
 
 @contextmanager
 def _application_logging(log_level: str, runtime_root: Path) -> Iterator[None]:
-    """Emit application logs to stdout and a runtime log for one lifetime.
+    """Write application and Uvicorn logs to a runtime log for one lifetime.
 
     Previous logger state is restored on exit so multiple test applications do
     not leak handlers or log levels into one another.
@@ -34,24 +38,31 @@ def _application_logging(log_level: str, runtime_root: Path) -> Iterator[None]:
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
     formatter.converter = time.gmtime
-    handlers = (
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(log_file, encoding="utf-8"),
-    )
-    for handler in handlers:
-        handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler(sys.stdout)
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    stream_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
     previous_level = application_logger.level
     previous_propagate = application_logger.propagate
-    for handler in handlers:
-        application_logger.addHandler(handler)
+    application_logger.addHandler(stream_handler)
+    application_logger.addHandler(file_handler)
     application_logger.setLevel(log_level)
     application_logger.propagate = False
+    uvicorn_loggers = (
+        logging.getLogger("uvicorn"),
+        logging.getLogger("uvicorn.access"),
+    )
+    for logger in uvicorn_loggers:
+        logger.addHandler(file_handler)
     try:
         yield
     finally:
-        for handler in handlers:
-            application_logger.removeHandler(handler)
-            handler.close()
+        for logger in uvicorn_loggers:
+            logger.removeHandler(file_handler)
+        application_logger.removeHandler(stream_handler)
+        application_logger.removeHandler(file_handler)
+        stream_handler.close()
+        file_handler.close()
         application_logger.setLevel(previous_level)
         application_logger.propagate = previous_propagate
 
@@ -80,6 +91,7 @@ def create_app(
 
         active_config = config or load_config()
         with _application_logging(active_config.log_level, active_config.runtime_root):
+            LOGGER.info("application started")
             owned_client: AsyncOpenAI | None = None
             active_service = service
             # Only clients created here are closed here. Injected services remain
@@ -102,6 +114,7 @@ def create_app(
             finally:
                 if owned_client is not None:
                     await owned_client.close()
+                LOGGER.info("application stopped")
 
     application = FastAPI(
         title="Visual Recommendations MVP",
@@ -119,6 +132,10 @@ def create_app(
     application.include_router(health_router)
     application.include_router(v1_router)
     application.include_router(demo_router)
+    application.add_exception_handler(
+        RequestValidationError, handle_request_validation_error
+    )
+    application.add_exception_handler(HTTPException, handle_http_exception)
     return application
 
 
