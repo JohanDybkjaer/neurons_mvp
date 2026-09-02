@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
-from app.config import DEFAULT_CONFIG
 from app.models import (
     BrandGuidelines,
     Evaluation,
@@ -128,7 +127,7 @@ async def run_task(
     task: TaskState,
     work_items: list[ImageWorkItem],
     service: OpenAIService,
-    timeout_seconds: float = DEFAULT_CONFIG.provider_timeout_seconds,
+    timeout_seconds: float,
 ) -> None:
     """Run up to two image pipelines and mutate the task to a terminal state."""
 

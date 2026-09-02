@@ -1,16 +1,26 @@
 import json
 import shutil
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.config import AppConfig
+from app.config import AppConfig, load_config
 from app.main import create_app
 from app.models import TaskStatus
-from conftest import make_evaluation, upload_payload
+from conftest import TEST_API_KEY, make_evaluation, upload_payload
 
 TASKS_PATH = "/api/v1/tasks"
+
+
+def make_test_config(tmp_path, **overrides):
+    return AppConfig(
+        openai_api_key=TEST_API_KEY,
+        runtime_root=tmp_path,
+        **overrides,
+    )
 
 
 class RecordingService:
@@ -52,7 +62,7 @@ class RecordingService:
 
 
 def test_health_swagger_and_openapi_expose_contract(tmp_path):
-    client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
+    client = TestClient(create_app(config=make_test_config(tmp_path)))
 
     assert client.get("/health").json() == {"status": "ok"}
     swagger_response = client.get("/docs")
@@ -77,7 +87,10 @@ def test_two_image_task_completes_with_retrievable_variants(
 ):
     service = RecordingService()
     client = TestClient(
-        create_app(service=service, config=AppConfig(runtime_root=tmp_path))
+        create_app(
+            service=service,
+            config=make_test_config(tmp_path),
+        )
     )
     images, recommendations_file, guidelines_file = upload_payload(
         png_bytes, recommendations, brand_guidelines
@@ -115,7 +128,7 @@ def test_two_image_task_completes_with_retrievable_variants(
 
 
 def test_invalid_json_is_rejected(tmp_path, png_bytes):
-    client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
+    client = TestClient(create_app(config=make_test_config(tmp_path)))
     response = client.post(
         TASKS_PATH,
         files=[
@@ -135,7 +148,7 @@ def test_invalid_image_is_rejected(
     images, recommendations_file, guidelines_file = upload_payload(
         b"not-an-image", recommendations, brand_guidelines, ("creative.png",)
     )
-    client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
+    client = TestClient(create_app(config=make_test_config(tmp_path)))
 
     response = client.post(
         TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
@@ -153,8 +166,8 @@ def test_oversized_image_is_rejected(
     )
     client = TestClient(
         create_app(
-            config=AppConfig(
-                runtime_root=tmp_path,
+            config=make_test_config(
+                tmp_path,
                 max_image_bytes=len(png_bytes) - 1,
             )
         )
@@ -175,7 +188,7 @@ def test_mismatched_filenames_are_rejected(
         png_bytes, recommendations, brand_guidelines, ("different.png",)
     )
     images = [("images", ("creative.png", png_bytes, "image/png"))]
-    client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
+    client = TestClient(create_app(config=make_test_config(tmp_path)))
 
     response = client.post(
         TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
@@ -194,7 +207,7 @@ def test_more_than_two_images_are_rejected(
     images, recommendations_file, guidelines_file = upload_payload(
         png_bytes, recommendations, brand_guidelines, filenames
     )
-    client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
+    client = TestClient(create_app(config=make_test_config(tmp_path)))
 
     response = client.post(
         TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
@@ -214,7 +227,8 @@ def test_provider_failure_marks_task_failed_safely(
 ):
     client = TestClient(
         create_app(
-            service=FailingService(), config=AppConfig(runtime_root=tmp_path)
+            service=FailingService(),
+            config=make_test_config(tmp_path),
         )
     )
     images, recommendations_file, guidelines_file = upload_payload(
@@ -233,7 +247,7 @@ def test_provider_failure_marks_task_failed_safely(
 
 
 def test_unknown_task_and_variant_return_safe_not_found(tmp_path):
-    client = TestClient(create_app(config=AppConfig(runtime_root=tmp_path)))
+    client = TestClient(create_app(config=make_test_config(tmp_path)))
 
     assert client.get(f"{TASKS_PATH}/not-a-task").status_code == 404
     assert client.get(f"{TASKS_PATH}/not-a-task/variants/image_1").status_code == 404
@@ -241,7 +255,62 @@ def test_unknown_task_and_variant_return_safe_not_found(tmp_path):
 
 def test_configuration_rejects_non_positive_limits():
     with pytest.raises(ValidationError):
-        AppConfig(max_image_bytes=0)
+        AppConfig(openai_api_key=TEST_API_KEY, max_image_bytes=0)
 
     with pytest.raises(ValidationError):
-        AppConfig(provider_timeout_seconds=0)
+        AppConfig(
+            openai_api_key=TEST_API_KEY,
+            provider_timeout_seconds=0,
+        )
+
+
+def test_missing_runtime_configuration_fails_startup_safely(monkeypatch):
+    secret = "must-not-leak"
+
+    def invalid_config():
+        return load_config(
+            {
+                "OPENAI_API_KEY": secret,
+                "IMAGE_MODEL": "",
+            }
+        )
+
+    monkeypatch.setattr("app.main.load_config", invalid_config)
+
+    with pytest.raises(RuntimeError) as captured:
+        with TestClient(create_app()):
+            pass
+
+    assert str(captured.value) == "Invalid application configuration."
+    assert secret not in str(captured.value)
+
+
+def test_application_closes_its_single_openai_client(monkeypatch, tmp_path):
+    provider_client = SimpleNamespace(close=AsyncMock())
+    construction_arguments = {}
+
+    def make_client(**kwargs):
+        construction_arguments.update(kwargs)
+        return provider_client
+
+    monkeypatch.setattr("app.main.AsyncOpenAI", make_client)
+    config = make_test_config(
+        tmp_path,
+        image_model="image-model",
+        evaluation_model="evaluation-model",
+        provider_timeout_seconds=30,
+    )
+    application = create_app(config=config)
+
+    with TestClient(application) as client:
+        assert client.get("/health").status_code == 200
+        first_service = application.state.service
+        assert first_service is not None
+        assert application.state.service is first_service
+
+    assert construction_arguments == {
+        "api_key": TEST_API_KEY,
+        "timeout": 30.0,
+        "max_retries": 0,
+    }
+    provider_client.close.assert_awaited_once()

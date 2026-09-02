@@ -13,6 +13,8 @@ from app.models import (
     RecommendationCheck,
 )
 
+TEST_API_KEY = "test-api-key"
+
 
 @pytest.fixture
 def png_bytes() -> bytes:

@@ -20,7 +20,7 @@ abstractions, or unnecessary infrastructure.
 ## Progress
 
 - [x] Step 1 - `mvp/api-and-workflow`
-- [ ] Step 2 - `mvp/openai-integration`
+- [x] Step 2 - `mvp/openai-integration`
 - [ ] Step 3 - `mvp/container-and-demo`
 
 ## Step 1 - `mvp/api-and-workflow`

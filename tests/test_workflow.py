@@ -76,7 +76,7 @@ def test_two_pipelines_overlap_and_each_evaluation_is_combined(
     service = ConcurrentService()
     task = TaskState(task_id="task-id", status=TaskStatus.pending)
 
-    asyncio.run(run_task(task, items, service))
+    asyncio.run(run_task(task, items, service, timeout_seconds=120))
 
     assert task.status == TaskStatus.completed
     assert service.maximum_active_generations == 2
@@ -125,7 +125,7 @@ def test_failed_first_evaluation_causes_one_repair_from_original(
     service = RepairService([False, True])
     task = TaskState(task_id="task-id", status=TaskStatus.pending)
 
-    asyncio.run(run_task(task, [item], service))
+    asyncio.run(run_task(task, [item], service, timeout_seconds=120))
 
     assert task.status == TaskStatus.completed
     assert task.results[0].attempts == 2
@@ -146,7 +146,7 @@ def test_failed_second_evaluation_is_final_and_task_is_completed(
     service = RepairService([False, False])
     task = TaskState(task_id="task-id", status=TaskStatus.pending)
 
-    asyncio.run(run_task(task, [item], service))
+    asyncio.run(run_task(task, [item], service, timeout_seconds=120))
 
     assert task.status == TaskStatus.completed
     assert task.error is None
@@ -175,7 +175,14 @@ def test_unvalidated_evaluator_output_cannot_control_workflow(
     )
     task = TaskState(task_id="task-id", status=TaskStatus.pending)
 
-    asyncio.run(run_task(task, [item], MalformedEvaluationService([])))
+    asyncio.run(
+        run_task(
+            task,
+            [item],
+            MalformedEvaluationService([]),
+            timeout_seconds=120,
+        )
+    )
 
     assert task.status == TaskStatus.failed
     assert task.error == "Task processing failed."

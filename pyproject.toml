@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115,<1",
+    "openai>=2,<3",
     "pillow>=11,<12",
     "pydantic>=2.10,<3",
     "python-multipart>=0.0.20,<1",
@@ -22,3 +23,6 @@ dev = [
 addopts = "-q"
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "real_api: opt-in test that makes paid OpenAI API calls",
+]
