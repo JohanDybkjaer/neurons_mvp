@@ -1,9 +1,12 @@
 import asyncio
 import base64
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
+from openai import BadRequestError
 from pydantic import ValidationError
 
 from app.ai_services import OpenAIService
@@ -43,6 +46,7 @@ def test_generate_variant_calls_image_edit_and_writes_result(
     assert call["image"][0] == "original.png"
     assert call["image"][1] == png_bytes
     assert call["output_format"] == "png"
+    assert "response_format" not in call
     assert "input_fidelity" not in call
     assert "Brand guidelines (authoritative)" in call["prompt"]
     assert all(item.id in call["prompt"] for item in recommendations)
@@ -163,3 +167,40 @@ def test_provider_exception_propagates(
                 brand_guidelines,
             )
         )
+
+
+def test_provider_status_error_logs_safe_diagnostics(
+    caplog, tmp_path, png_bytes, recommendations, brand_guidelines
+):
+    original_path = tmp_path / "original.png"
+    write_original(original_path, png_bytes)
+    response = httpx.Response(
+        400,
+        headers={"x-request-id": "req_image_edit"},
+        request=httpx.Request("POST", "https://api.openai.com/v1/images/edits"),
+    )
+    provider_error = BadRequestError(
+        "provider detail that must not be logged",
+        response=response,
+        body={"code": "image_generation_user_error"},
+    )
+    client = make_client()
+    client.images.edit.side_effect = provider_error
+    service = OpenAIService(client, "image-model", "evaluation-model")
+
+    with caplog.at_level(logging.WARNING, logger="app.ai_services.openai"):
+        with pytest.raises(BadRequestError):
+            asyncio.run(
+                service.generate_variant(
+                    original_path,
+                    tmp_path / "variant.png",
+                    recommendations,
+                    brand_guidelines,
+                )
+            )
+
+    assert (
+        "provider_operation=image_edit status_code=400 "
+        "provider_code=image_generation_user_error request_id=req_image_edit"
+    ) in caplog.messages
+    assert "provider detail that must not be logged" not in caplog.messages

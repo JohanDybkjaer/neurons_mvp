@@ -427,6 +427,8 @@ metadata:
 - Started, succeeded, or failed outcome.
 - Step, pipeline, and task duration.
 - Final evaluation pass/fail and exception class names, without exception text.
+- Provider operation, HTTP status, provider error code, and request ID, without
+  provider response content.
 
 Do not log API keys, image bytes, filenames, complete prompts, uploaded JSON
 payloads, provider payloads, exception messages, or tracebacks.

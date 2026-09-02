@@ -8,12 +8,15 @@ import asyncio
 import base64
 import binascii
 import json
+import logging
 from pathlib import Path
 from typing import Literal
 
-from openai import AsyncOpenAI
+from openai import APIStatusError, AsyncOpenAI
 
 from app.schema_models import BrandGuidelines, Evaluation, Recommendation
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _editing_prompt(
@@ -110,6 +113,21 @@ def _data_url(image_bytes: bytes, path: Path) -> str:
     return f"data:{_media_type(path)};base64,{encoded}"
 
 
+def _log_provider_error(operation: str, error: APIStatusError) -> None:
+    """Log safe provider diagnostics without recording response content."""
+
+    LOGGER.warning(
+        (
+            "provider_operation=%s status_code=%d provider_code=%s "
+            "request_id=%s"
+        ),
+        operation,
+        error.status_code,
+        error.code or "none",
+        error.request_id or "none",
+    )
+
+
 class OpenAIService:
     """Perform both AI roles through one long-lived asynchronous client.
 
@@ -165,17 +183,20 @@ class OpenAIService:
             if destination_path.suffix.lower() in {".jpg", ".jpeg"}
             else "png"
         )
-        response = await self._client.images.edit(
-            model=self._image_model,
-            image=(original_path.name, original_bytes, _media_type(original_path)),
-            prompt=_editing_prompt(
-                recommendations,
-                brand_guidelines,
-                repair_feedback,
-            ),
-            output_format=output_format,
-            response_format="b64_json",
-        )
+        try:
+            response = await self._client.images.edit(
+                model=self._image_model,
+                image=(original_path.name, original_bytes, _media_type(original_path)),
+                prompt=_editing_prompt(
+                    recommendations,
+                    brand_guidelines,
+                    repair_feedback,
+                ),
+                output_format=output_format,
+            )
+        except APIStatusError as error:
+            _log_provider_error("image_edit", error)
+            raise
         # Treat provider output as untrusted even after a successful HTTP call.
         if not response.data or not response.data[0].b64_json:
             raise ValueError("Image provider returned no image data")
@@ -214,38 +235,42 @@ class OpenAIService:
         )
         # One combined request gives every recommendation and brand check the
         # same visual context and avoids inconsistent per-criterion judgments.
-        response = await self._client.responses.parse(
-            model=self._evaluation_model,
-            instructions=(
-                "You are a strict visual compliance evaluator. Return only the "
-                "requested structured evaluation."
-            ),
-            input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": _evaluation_prompt(
-                                recommendations,
-                                brand_guidelines,
-                            ),
-                        },
-                        {"type": "input_text", "text": "Original creative:"},
-                        {
-                            "type": "input_image",
-                            "image_url": _data_url(original_bytes, original_path),
-                            "detail": "high",
-                        },
-                        {"type": "input_text", "text": "Generated variant:"},
-                        {
-                            "type": "input_image",
-                            "image_url": _data_url(variant_bytes, variant_path),
-                            "detail": "high",
-                        },
-                    ],
-                }
-            ],
-            text_format=Evaluation,
-        )
+        try:
+            response = await self._client.responses.parse(
+                model=self._evaluation_model,
+                instructions=(
+                    "You are a strict visual compliance evaluator. Return only the "
+                    "requested structured evaluation."
+                ),
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": _evaluation_prompt(
+                                    recommendations,
+                                    brand_guidelines,
+                                ),
+                            },
+                            {"type": "input_text", "text": "Original creative:"},
+                            {
+                                "type": "input_image",
+                                "image_url": _data_url(original_bytes, original_path),
+                                "detail": "high",
+                            },
+                            {"type": "input_text", "text": "Generated variant:"},
+                            {
+                                "type": "input_image",
+                                "image_url": _data_url(variant_bytes, variant_path),
+                                "detail": "high",
+                            },
+                        ],
+                    }
+                ],
+                text_format=Evaluation,
+            )
+        except APIStatusError as error:
+            _log_provider_error("evaluation", error)
+            raise
         return Evaluation.model_validate(response.output_parsed)
