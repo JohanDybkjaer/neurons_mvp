@@ -309,14 +309,17 @@ service does not add retries, exception taxonomies, or partial-success rules.
 
 ## Logging
 
-Use Python's standard `logging` module and write to stdout. Log only:
+Use Python's standard `logging` module and write to stdout. Log only safe,
+operational metadata:
 
-- Task ID and image identifier.
-- Workflow step and attempt number.
-- Success or failure.
-- Step duration.
+- Task ID and image identifier (`all` for task-wide events).
+- Workflow step, attempt number, and task image count where relevant.
+- Started, succeeded, or failed outcome.
+- Step, pipeline, and task duration.
+- Final evaluation pass/fail and exception class names, without exception text.
 
-Do not log API keys, image bytes, complete prompts, or uploaded JSON payloads.
+Do not log API keys, image bytes, filenames, complete prompts, uploaded JSON
+payloads, provider payloads, exception messages, or tracebacks.
 
 ## Code structure
 

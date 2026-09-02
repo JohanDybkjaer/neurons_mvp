@@ -127,6 +127,47 @@ def test_two_image_task_completes_with_retrievable_variants(
     assert all(call[1] == ["rec_1", "rec_2", "rec_3"] for call in service.evaluation_calls)
 
 
+def test_workflow_step_metadata_is_logged_to_stdout(
+    capsys,
+    tmp_path,
+    png_bytes,
+    recommendations,
+    brand_guidelines,
+):
+    service = RecordingService()
+    application = create_app(
+        service=service,
+        config=make_test_config(tmp_path),
+    )
+    images, recommendations_file, guidelines_file = upload_payload(
+        png_bytes,
+        recommendations,
+        brand_guidelines,
+        ("creative.png",),
+    )
+
+    with TestClient(application) as client:
+        created = client.post(
+            TASKS_PATH,
+            files=[*images, recommendations_file, guidelines_file],
+        ).json()
+
+    output = capsys.readouterr().out
+    log_prefix = f"task_id={created['task_id']} image_id=image_1"
+    assert f"{log_prefix} step=generation attempt=1 outcome=success" in output
+    assert f"{log_prefix} step=evaluation attempt=1 outcome=success" in output
+    assert (
+        f"{log_prefix} step=pipeline attempt=1 outcome=success overall_pass=true"
+        in output
+    )
+    assert (
+        f"task_id={created['task_id']} image_id=all step=task attempt=1 "
+        "outcome=success image_count=1" in output
+    )
+    assert "duration_ms=" in output
+    assert "creative.png" not in output
+
+
 def test_invalid_json_is_rejected(tmp_path, png_bytes):
     client = TestClient(create_app(config=make_test_config(tmp_path)))
     response = client.post(

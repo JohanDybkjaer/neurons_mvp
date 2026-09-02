@@ -1,7 +1,9 @@
 """FastAPI application composition root."""
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+import logging
+import sys
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -14,6 +16,27 @@ from app.models import TaskState
 from app.openai_service import OpenAIService
 
 
+@contextmanager
+def _application_logging() -> Iterator[None]:
+    """Emit application logs to stdout for the application's lifetime."""
+
+    application_logger = logging.getLogger("app")
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(message)s"))
+    previous_level = application_logger.level
+    previous_propagate = application_logger.propagate
+    application_logger.addHandler(handler)
+    application_logger.setLevel(logging.INFO)
+    application_logger.propagate = False
+    try:
+        yield
+    finally:
+        application_logger.removeHandler(handler)
+        handler.close()
+        application_logger.setLevel(previous_level)
+        application_logger.propagate = previous_propagate
+
+
 def create_app(
     service: OpenAIService | None = None,
     config: AppConfig | None = None,
@@ -24,27 +47,28 @@ def create_app(
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         """Create and close the application-owned provider client."""
 
-        active_config = config or load_config()
-        owned_client: AsyncOpenAI | None = None
-        active_service = service
-        if active_service is None:
-            owned_client = AsyncOpenAI(
-                api_key=active_config.openai_api_key.get_secret_value(),
-                timeout=active_config.provider_timeout_seconds,
-                max_retries=0,
-            )
-            active_service = OpenAIService(
-                owned_client,
-                active_config.image_model,
-                active_config.evaluation_model,
-            )
-        application.state.config = active_config
-        application.state.service = active_service
-        try:
-            yield
-        finally:
-            if owned_client is not None:
-                await owned_client.close()
+        with _application_logging():
+            active_config = config or load_config()
+            owned_client: AsyncOpenAI | None = None
+            active_service = service
+            if active_service is None:
+                owned_client = AsyncOpenAI(
+                    api_key=active_config.openai_api_key.get_secret_value(),
+                    timeout=active_config.provider_timeout_seconds,
+                    max_retries=0,
+                )
+                active_service = OpenAIService(
+                    owned_client,
+                    active_config.image_model,
+                    active_config.evaluation_model,
+                )
+            application.state.config = active_config
+            application.state.service = active_service
+            try:
+                yield
+            finally:
+                if owned_client is not None:
+                    await owned_client.close()
 
     application = FastAPI(
         title="Visual Recommendations MVP",

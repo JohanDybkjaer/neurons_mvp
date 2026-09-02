@@ -1,6 +1,8 @@
 """Concurrent task orchestration with one bounded repair per creative."""
 
 import asyncio
+import logging
+import time
 from collections import Counter
 from collections.abc import Awaitable
 from dataclasses import dataclass
@@ -18,6 +20,7 @@ from app.models import (
 from app.openai_service import OpenAIService
 
 ReturnType = TypeVar("ReturnType")
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -33,13 +36,56 @@ class ImageWorkItem:
     brand_guidelines: BrandGuidelines
 
 
-async def _call_with_timeout(
+async def _run_step(
     awaitable: Awaitable[ReturnType],
     timeout_seconds: float,
+    task_id: str,
+    image_id: str,
+    step: str,
+    attempt: int,
 ) -> ReturnType:
-    """Bound one asynchronous provider operation by the configured timeout."""
+    """Run and safely log one bounded workflow operation."""
 
-    return await asyncio.wait_for(awaitable, timeout=timeout_seconds)
+    started_at = time.perf_counter()
+    LOGGER.info(
+        (
+            "task_id=%s image_id=%s step=%s attempt=%d "
+            "outcome=started duration_ms=0.0"
+        ),
+        task_id,
+        image_id,
+        step,
+        attempt,
+    )
+    try:
+        result = await asyncio.wait_for(awaitable, timeout=timeout_seconds)
+    except Exception as error:
+        LOGGER.warning(
+            (
+                "task_id=%s image_id=%s step=%s attempt=%d "
+                "outcome=failed error_type=%s duration_ms=%.1f"
+            ),
+            task_id,
+            image_id,
+            step,
+            attempt,
+            type(error).__name__,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        raise
+
+    LOGGER.info(
+        (
+            "task_id=%s image_id=%s step=%s attempt=%d "
+            "outcome=success duration_ms=%.1f"
+        ),
+        task_id,
+        image_id,
+        step,
+        attempt,
+        (time.perf_counter() - started_at) * 1000,
+    )
+    return result
 
 
 def _validate_evaluation(evaluation: Evaluation, item: ImageWorkItem) -> None:
@@ -57,21 +103,17 @@ def _validate_evaluation(evaluation: Evaluation, item: ImageWorkItem) -> None:
         raise ValueError("Evaluation brand checks do not match the request")
 
 
-async def _evaluate(
+async def _request_evaluation(
     item: ImageWorkItem,
     service: OpenAIService,
-    timeout_seconds: float,
 ) -> Evaluation:
-    """Call the evaluator and validate both its schema and semantic coverage."""
+    """Request and validate the evaluator's schema and semantic coverage."""
 
-    response = await _call_with_timeout(
-        service.evaluate_variant(
-            item.original_path,
-            item.variant_path,
-            item.recommendations,
-            item.brand_guidelines,
-        ),
-        timeout_seconds,
+    response = await service.evaluate_variant(
+        item.original_path,
+        item.variant_path,
+        item.recommendations,
+        item.brand_guidelines,
     )
     evaluation = Evaluation.model_validate(response)
     _validate_evaluation(evaluation, item)
@@ -79,6 +121,7 @@ async def _evaluate(
 
 
 async def _process_image(
+    task_id: str,
     item: ImageWorkItem,
     service: OpenAIService,
     semaphore: asyncio.Semaphore,
@@ -86,41 +129,90 @@ async def _process_image(
 ) -> ImageResult:
     """Run generation, evaluation, and at most one repair sequentially."""
 
-    async with semaphore:
-        await _call_with_timeout(
-            service.generate_variant(
-                item.original_path,
-                item.variant_path,
-                item.recommendations,
-                item.brand_guidelines,
-            ),
-            timeout_seconds,
-        )
-        evaluation = await _evaluate(item, service, timeout_seconds)
-        attempts = 1
-
-        if not evaluation.overall_pass:
-            attempts = 2
-            # Repair from the original creative to avoid cumulative image drift.
-            await _call_with_timeout(
+    started_at = time.perf_counter()
+    attempts = 1
+    try:
+        async with semaphore:
+            await _run_step(
                 service.generate_variant(
                     item.original_path,
                     item.variant_path,
                     item.recommendations,
                     item.brand_guidelines,
-                    repair_feedback=evaluation,
                 ),
                 timeout_seconds,
+                task_id,
+                item.image_id,
+                "generation",
+                1,
             )
-            evaluation = await _evaluate(item, service, timeout_seconds)
+            evaluation = await _run_step(
+                _request_evaluation(item, service),
+                timeout_seconds,
+                task_id,
+                item.image_id,
+                "evaluation",
+                1,
+            )
+            if not evaluation.overall_pass:
+                attempts = 2
+                # Repair from the original creative to avoid cumulative image drift.
+                await _run_step(
+                    service.generate_variant(
+                        item.original_path,
+                        item.variant_path,
+                        item.recommendations,
+                        item.brand_guidelines,
+                        repair_feedback=evaluation,
+                    ),
+                    timeout_seconds,
+                    task_id,
+                    item.image_id,
+                    "generation",
+                    2,
+                )
+                evaluation = await _run_step(
+                    _request_evaluation(item, service),
+                    timeout_seconds,
+                    task_id,
+                    item.image_id,
+                    "evaluation",
+                    2,
+                )
 
-        return ImageResult(
+        result = ImageResult(
             image_id=item.image_id,
             source_filename=item.source_filename,
             variant_url=item.variant_url,
             attempts=attempts,
             evaluation=evaluation,
         )
+    except Exception as error:
+        LOGGER.warning(
+            (
+                "task_id=%s image_id=%s step=pipeline attempt=%d "
+                "outcome=failed error_type=%s duration_ms=%.1f"
+            ),
+            task_id,
+            item.image_id,
+            attempts,
+            type(error).__name__,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        raise
+
+    LOGGER.info(
+        (
+            "task_id=%s image_id=%s step=pipeline attempt=%d "
+            "outcome=success overall_pass=%s duration_ms=%.1f"
+        ),
+        task_id,
+        item.image_id,
+        attempts,
+        str(evaluation.overall_pass).lower(),
+        (time.perf_counter() - started_at) * 1000,
+    )
+    return result
 
 
 async def run_task(
@@ -131,13 +223,24 @@ async def run_task(
 ) -> None:
     """Run up to two image pipelines and mutate the task to a terminal state."""
 
+    started_at = time.perf_counter()
+    image_count = len(work_items)
     task.status = TaskStatus.running
+    LOGGER.info(
+        (
+            "task_id=%s image_id=all step=task attempt=1 "
+            "outcome=started image_count=%d duration_ms=0.0"
+        ),
+        task.task_id,
+        image_count,
+    )
     try:
         semaphore = asyncio.Semaphore(2)
         task.results = list(
             await asyncio.gather(
                 *(
                     _process_image(
+                        task.task_id,
                         item,
                         service,
                         semaphore,
@@ -147,11 +250,30 @@ async def run_task(
                 )
             )
         )
-    except Exception:
+    except Exception as error:
         # Provider details are intentionally collapsed into a safe public error.
         task.results = []
         task.status = TaskStatus.failed
         task.error = "Task processing failed."
+        LOGGER.warning(
+            (
+                "task_id=%s image_id=all step=task attempt=1 outcome=failed "
+                "image_count=%d error_type=%s duration_ms=%.1f"
+            ),
+            task.task_id,
+            image_count,
+            type(error).__name__,
+            (time.perf_counter() - started_at) * 1000,
+        )
         return
 
     task.status = TaskStatus.completed
+    LOGGER.info(
+        (
+            "task_id=%s image_id=all step=task attempt=1 outcome=success "
+            "image_count=%d duration_ms=%.1f"
+        ),
+        task.task_id,
+        image_count,
+        (time.perf_counter() - started_at) * 1000,
+    )
