@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
@@ -28,7 +29,11 @@ def _application_logging(log_level: str, runtime_root: Path) -> Iterator[None]:
     application_logger = logging.getLogger("app")
     log_file = runtime_root.parent / "logs" / "app.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)sZ %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
+    formatter.converter = time.gmtime
     handlers = (
         logging.StreamHandler(sys.stdout),
         logging.FileHandler(log_file, encoding="utf-8"),

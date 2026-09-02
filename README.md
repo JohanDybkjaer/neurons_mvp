@@ -241,7 +241,7 @@ TOML file.
 | `providers.timeout_seconds` | `120` | Timeout applied to each provider operation. |
 | `limits.max_image_size_mb` | `10` | Maximum accepted upload size per image. |
 | `limits.max_iterations` | `2` | Maximum generation/evaluation pairs for each image. |
-| `logging.level` | `INFO` | Application log threshold. |
+| `logging.level` | `DEBUG` | Application log threshold. |
 | `storage.artifact_root` | `runtime/tasks` | Server-managed task artifact directory. |
 
 The initial generation and evaluation count as iteration 1. Set

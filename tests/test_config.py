@@ -66,7 +66,7 @@ def test_load_config_reads_non_secrets_only_from_toml(tmp_path):
 @pytest.mark.parametrize(
     ("config_file", "expected_log_level", "expected_runtime_root"),
     [
-        (Path("config/dev.toml"), "INFO", "runtime/tasks"),
+        (Path("config/dev.toml"), "DEBUG", "runtime/tasks"),
         (Path("config/test.toml"), "WARNING", "runtime/test-tasks"),
     ],
 )

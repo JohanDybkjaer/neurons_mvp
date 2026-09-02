@@ -1,4 +1,6 @@
 import json
+import logging
+import re
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -113,11 +115,16 @@ def test_health_swagger_and_openapi_expose_contract(tmp_path):
 
 def test_application_creates_runtime_log_file(tmp_path):
     config = make_test_config(tmp_path)
+    log_file = tmp_path.parent / "logs" / "app.log"
 
     with TestClient(create_app(config=config)):
-        pass
+        logging.getLogger("app").info("logging lifecycle verified")
 
-    assert (tmp_path.parent / "logs" / "app.log").is_file()
+    assert log_file.is_file()
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z INFO app logging lifecycle verified",
+        log_file.read_text().strip(),
+    )
 
 
 def test_ten_image_task_completes_with_retrievable_variants(
