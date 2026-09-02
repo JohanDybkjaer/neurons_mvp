@@ -63,8 +63,10 @@ The launcher defaults to port 8001. To use another local port:
 make dev PORT=8002
 ```
 
-Application logs continue to appear in the terminal and are also appended to
-`runtime/logs/app.log`. The `runtime/` directory is ignored by Git.
+Application logs continue to appear in the terminal and are also written to
+`runtime/logs/app.log`. Starting the API clears prior runtime tasks and logs,
+so this file contains only the current run. The `runtime/` directory is ignored
+by Git.
 
 Check that the process is running:
 
@@ -237,12 +239,12 @@ TOML file.
 | Setting | Development value | Meaning |
 | --- | --- | --- |
 | `providers.image_editor_model` | `gpt-image-2` | Model used to edit creatives. |
-| `providers.evaluator_model` | `gpt-5.6` | Model used to evaluate variants. |
+| `providers.evaluator_model` | `gpt-5.6-terra` | Model used to evaluate variants. |
 | `providers.timeout_seconds` | `120` | Timeout applied to each provider operation. |
 | `limits.max_image_size_mb` | `10` | Maximum accepted upload size per image. |
 | `limits.max_iterations` | `2` | Maximum generation/evaluation pairs for each image. |
 | `logging.level` | `DEBUG` | Application log threshold. |
-| `storage.artifact_root` | `runtime/tasks` | Server-managed task artifact directory. |
+| `storage.artifact_root` | `runtime/tasks` | Server-managed task input and variant directory. |
 
 The initial generation and evaluation count as iteration 1. Set
 `max_iterations = 1` to disable repairs. The configuration accepts values from
@@ -294,5 +296,5 @@ APP_CONFIG_FILE=config/dev.toml RUN_OPENAI_SMOKE_TEST=1 uv run pytest -m real_ap
 | `examples/demo/` | Committed demo images and matching JSON documents. |
 
 The service runs as one Uvicorn worker with process-local task state. Restarting
-the process loses task status and local artifact availability; this is an
+the process clears task status, task artifacts, and runtime logs; this is an
 intentional MVP limitation documented in [DESIGN.md](DESIGN.md).

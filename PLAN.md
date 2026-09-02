@@ -155,6 +155,10 @@ Make the small service easy to run, inspect, and discuss in the interview.
 - Add standard-library logging to stdout and a server-managed runtime log file
   for task ID, image ID, step, attempt, duration, and outcome without logging
   sensitive payloads.
+- Clear application-owned task artifacts and runtime logs when the API starts,
+  so each process run begins with fresh process-local state.
+- Store each task's validated recommendations and brand-guidelines JSON files
+  beside its server-owned input images.
 - Log safe request-validation rejection metadata without recording uploaded
   multipart content or invalid field values.
 - Write a concise README covering:

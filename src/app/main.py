@@ -1,6 +1,8 @@
 """Compose the FastAPI process, application-owned state, and provider client."""
 
+import asyncio
 import logging
+import shutil
 import sys
 import time
 from collections.abc import AsyncIterator, Iterator
@@ -20,6 +22,16 @@ from app.config import AppConfig, load_config
 from app.schema_models import TaskState
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _clear_runtime_directories(runtime_root: Path) -> None:
+    """Remove application-owned task artifacts and logs from an earlier run."""
+
+    runtime_log_root = runtime_root.parent / "logs"
+    for directory in (runtime_root, runtime_log_root):
+        if directory.exists():
+            shutil.rmtree(directory)
+        directory.mkdir(parents=True, exist_ok=True)
 
 
 @contextmanager
@@ -90,6 +102,9 @@ def create_app(
         """Create and close the application-owned provider client."""
 
         active_config = config or load_config()
+        await asyncio.to_thread(_clear_runtime_directories, active_config.runtime_root)
+        application.state.tasks.clear()
+        application.state.variant_paths.clear()
         with _application_logging(active_config.log_level, active_config.runtime_root):
             LOGGER.info("application started")
             owned_client: AsyncOpenAI | None = None

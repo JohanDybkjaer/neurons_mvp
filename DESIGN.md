@@ -320,7 +320,7 @@ does not merge files or branch on an environment name:
 ```toml
 [providers]
 image_editor_model = "gpt-image-2"
-evaluator_model = "gpt-5.6"
+evaluator_model = "gpt-5.6-terra"
 timeout_seconds = 120
 
 [limits]
@@ -376,17 +376,24 @@ invariants.
 
 ## Storage and task state
 
-Task state is a process-local dictionary keyed by a UUID. Input and generated
-images are stored under:
+Task state is a process-local dictionary keyed by a UUID. Input images, the
+validated JSON input documents, and generated images are stored under:
 
 ```text
 runtime/tasks/<task_id>/
   inputs/
+    image_1.png
+    recommendations.json
+    brand_guidelines.json
   variants/
 ```
 
 All directory and file names are generated or resolved by the server. Uploaded
 filenames are metadata and are never used directly as filesystem paths.
+
+Each application startup clears the configured task-artifact directory and the
+adjacent server-managed log directory before accepting requests. Runtime files
+therefore belong only to the current process run.
 
 This MVP runs as one application process. The consequences of process-local
 state and storage are recorded explicitly under **Accepted limitations** rather
@@ -556,8 +563,8 @@ the README and technical discussion:
   pending or running work; tasks are not resumed.
 - The service runs one process with one worker. It does not support horizontal
   scaling or coordinate work across instances.
-- Inputs and variants use local disk. Artifacts are not durable, and task
-  directories are not removed automatically.
+- Inputs and variants use local disk. Artifacts are not durable, and startup
+  clears prior task directories and runtime logs.
 - A technical failure in any image pipeline fails the whole task. There is
   no partial-success response or automatic provider retry.
 - Image generation and visual evaluation are probabilistic. A passing brand

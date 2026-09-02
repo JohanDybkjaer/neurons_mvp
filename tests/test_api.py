@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from app.config import AppConfig, load_config
 from app.main import create_app
-from app.schema_models import TaskStatus
+from app.schema_models import TaskState, TaskStatus
 from conftest import TEST_API_KEY, make_evaluation, upload_payload
 
 TASKS_PATH = "/api/v1/tasks"
@@ -131,6 +131,30 @@ def test_application_creates_runtime_log_file(tmp_path):
     )
 
 
+def test_application_startup_clears_prior_runtime_state(tmp_path):
+    config = make_test_config(tmp_path)
+    stale_task_file = tmp_path / "stale-task" / "inputs" / "original.png"
+    stale_task_file.parent.mkdir(parents=True)
+    stale_task_file.write_bytes(b"stale task artifact")
+    stale_log_file = tmp_path.parent / "logs" / "previous.log"
+    stale_log_file.parent.mkdir(exist_ok=True)
+    stale_log_file.write_text("stale log entry")
+    application = create_app(config=config)
+    application.state.tasks["stale-task"] = TaskState(
+        task_id="stale-task", status=TaskStatus.completed
+    )
+    application.state.variant_paths["stale-task"] = {"image_1": stale_task_file}
+
+    with TestClient(application):
+        assert application.state.tasks == {}
+        assert application.state.variant_paths == {}
+        assert not stale_task_file.exists()
+        assert not stale_log_file.exists()
+
+    log_output = (tmp_path.parent / "logs" / "app.log").read_text()
+    assert "stale log entry" not in log_output
+
+
 def test_validation_rejections_are_logged_without_uploaded_content(
     tmp_path, png_bytes
 ):
@@ -206,6 +230,13 @@ def test_ten_image_task_completes_with_retrievable_variants(
         len(result["evaluation"]["brand_checks"]) == 5
         for result in task["results"]
     )
+    input_directory = tmp_path / created["task_id"] / "inputs"
+    assert json.loads(
+        (input_directory / "recommendations.json").read_text()
+    ) == json.loads(recommendations_file[1][1])
+    assert json.loads(
+        (input_directory / "brand_guidelines.json").read_text()
+    ) == json.loads(guidelines_file[1][1])
     for result in task["results"]:
         variant = client.get(result["variant_url"])
         assert variant.status_code == 200

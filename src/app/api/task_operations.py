@@ -70,6 +70,27 @@ async def _parse_json_upload(
         ) from None
 
 
+async def _store_validated_json_inputs(
+    input_directory: Path,
+    recommendations: RecommendationsDocument,
+    brand_guidelines: BrandGuidelinesDocument,
+) -> None:
+    """Write canonical validated JSON inputs into the server-owned task directory."""
+
+    await asyncio.gather(
+        asyncio.to_thread(
+            (input_directory / "recommendations.json").write_text,
+            recommendations.model_dump_json(indent=2),
+            encoding="utf-8",
+        ),
+        asyncio.to_thread(
+            (input_directory / "brand_guidelines.json").write_text,
+            brand_guidelines.model_dump_json(indent=2),
+            encoding="utf-8",
+        ),
+    )
+
+
 def _index_by_filename(
     entries: list[FilenameEntry],
     label: str,
@@ -172,6 +193,11 @@ async def submit_task(
     variant_directory = task_directory / "variants"
     await asyncio.to_thread(input_directory.mkdir, parents=True)
     await asyncio.to_thread(variant_directory.mkdir, parents=True)
+    await _store_validated_json_inputs(
+        input_directory,
+        recommendation_document,
+        guideline_document,
+    )
 
     work_items: list[ImageWorkItem] = []
     variant_paths: dict[str, Path] = {}

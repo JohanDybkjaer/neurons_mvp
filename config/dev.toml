@@ -1,7 +1,7 @@
 # Models used by the two AI roles and the timeout applied to each provider call.
 [providers]
 image_editor_model = "gpt-image-2"
-evaluator_model = "gpt-5.6"
+evaluator_model = "gpt-5.6-terra"
 timeout_seconds = 120
 
 # Upload and iteration limits. The initial generation and evaluation count as

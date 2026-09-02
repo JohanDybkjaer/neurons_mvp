@@ -82,7 +82,7 @@ def test_committed_configs_are_valid(
     )
 
     assert config.image_model == "gpt-image-2"
-    assert config.evaluation_model == "gpt-5.6"
+    assert config.evaluation_model == "gpt-5.6-terra"
     assert config.log_level == expected_log_level
     assert str(config.runtime_root) == expected_runtime_root
     assert config.max_iterations == 2
