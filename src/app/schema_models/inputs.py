@@ -25,7 +25,13 @@ class BrandGuidelines(BaseModel):
     brand_elements: str
 
     def criteria(self) -> list[str]:
-        """Flatten every explicit guideline into evaluator check criteria."""
+        """Flatten every explicit guideline into evaluator check criteria.
+
+        Example:
+            A guideline with ``protected_regions=["Keep logo"]`` and three
+            textual rules returns ``["Keep logo", typography, aspect_ratio,
+            brand_elements]`` in stable order.
+        """
 
         return [
             *self.protected_regions,

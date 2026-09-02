@@ -27,8 +27,30 @@ configuration.
 Select exactly one configuration document through `APP_CONFIG_FILE`:
 
 ```shell
-APP_CONFIG_FILE=config/dev.toml uv run uvicorn app.main:app
+APP_CONFIG_FILE=config/dev.toml uv run uvicorn app.main:app --app-dir src
 ```
 
-Use `config/test.toml` for a deployed test instance. `APP_CONFIG_FILE` is
-intentionally not placed in `.env`, keeping that file limited to secrets.
+For a deployed test instance:
+
+```shell
+APP_CONFIG_FILE=config/test.toml uv run uvicorn app.main:app --app-dir src
+```
+
+`APP_CONFIG_FILE` is intentionally not placed in `.env`, keeping that file
+limited to secrets.
+
+## Code map
+
+- `api/` validates HTTP input and exposes health and task routes.
+- `schema_models/` owns Pydantic schemas for inputs, evaluations, and tasks.
+- `workflows/` coordinates concurrent generation, evaluation, and one repair.
+- `ai_services/` contains provider adapters; `openai.py` owns OpenAI payloads.
+- `config/` selects, loads, and validates configuration once at startup.
+- `main.py` composes the application and owns long-lived process state.
+
+The main request path is: API validation → workflow orchestration → AI service
+adapter → validated evaluation → task result. Provider payloads do not enter the
+workflow directly.
+
+With the server running, open `http://127.0.0.1:8000/docs` for the interactive
+Swagger UI.

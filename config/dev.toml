@@ -1,13 +1,17 @@
+# Models used by the two AI roles and the timeout applied to each provider call.
 [providers]
 image_editor_model = "gpt-image-2"
 evaluator_model = "gpt-5.6"
 timeout_seconds = 120
 
+# Upload validation limits. Workflow behavior remains fixed in application code.
 [limits]
 max_image_size_mb = 10
 
+# Application log verbosity; logs are written to stdout.
 [logging]
 level = "INFO"
 
+# Server-managed originals and generated variants, relative to the working directory.
 [storage]
-artifact_root = "runtime/tasks" # Where tasks are stored along with their artifacts/images
+artifact_root = "runtime/tasks"

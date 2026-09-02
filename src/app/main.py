@@ -1,4 +1,4 @@
-"""FastAPI application composition root."""
+"""Compose the FastAPI process, application-owned state, and provider client."""
 
 import logging
 import sys
@@ -9,16 +9,20 @@ from pathlib import Path
 from fastapi import FastAPI
 from openai import AsyncOpenAI
 
+from app.ai_services import OpenAIService
 from app.api import health_router
 from app.api.v1 import router as v1_router
 from app.config import AppConfig, load_config
-from app.ai_services import OpenAIService
 from app.schema_models import TaskState
 
 
 @contextmanager
 def _application_logging(log_level: str) -> Iterator[None]:
-    """Emit application logs to stdout for the application's lifetime."""
+    """Emit application logs to stdout for one application's lifetime.
+
+    Previous logger state is restored on exit so multiple test applications do
+    not leak handlers or log levels into one another.
+    """
 
     application_logger = logging.getLogger("app")
     handler = logging.StreamHandler(sys.stdout)
@@ -41,7 +45,19 @@ def create_app(
     service: OpenAIService | None = None,
     config: AppConfig | None = None,
 ) -> FastAPI:
-    """Build an isolated application with injectable service and settings."""
+    """Build an isolated application with injectable external dependencies.
+
+    Passing ``service`` and ``config`` keeps tests deterministic. During normal
+    startup both are composed from the selected configuration and one
+    application-owned OpenAI client.
+
+    Args:
+        service: Optional deterministic or externally managed AI service.
+        config: Optional validated settings that bypass startup file loading.
+
+    Returns:
+        A fully routed FastAPI application with process-local task state.
+    """
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -51,6 +67,8 @@ def create_app(
         with _application_logging(active_config.log_level):
             owned_client: AsyncOpenAI | None = None
             active_service = service
+            # Only clients created here are closed here. Injected services remain
+            # owned by the caller that supplied them.
             if active_service is None:
                 owned_client = AsyncOpenAI(
                     api_key=active_config.openai_api_key.get_secret_value(),
@@ -77,6 +95,8 @@ def create_app(
         openapi_url="/openapi.json",
         lifespan=lifespan,
     )
+    # Task state and artifact indexes intentionally share this process lifetime;
+    # running more than one worker would create independent, inconsistent views.
     application.state.tasks: dict[str, TaskState] = {}
     application.state.variant_paths: dict[str, dict[str, Path]] = {}
     application.state.service = service

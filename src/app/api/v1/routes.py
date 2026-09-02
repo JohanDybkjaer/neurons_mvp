@@ -127,7 +127,11 @@ async def create_task(
         UploadFile, File(description="Brand guidelines JSON file")
     ],
 ) -> TaskCreated:
-    """Validate uploads, create task-owned artifacts, and schedule processing."""
+    """Validate uploads, persist inputs, and schedule asynchronous processing.
+
+    The handler returns ``202`` after creating process-local state; clients poll
+    the returned ``status_url`` while the workflow runs in the background.
+    """
 
     app_config = cast(AppConfig, request.app.state.config)
     if not 1 <= len(images) <= 2:
@@ -136,6 +140,8 @@ async def create_task(
             detail="Upload one or two images.",
         )
 
+    # Parse both documents before writing files so malformed requests leave no
+    # partial task directory behind.
     recommendation_document = await _parse_json_upload(
         recommendations, RecommendationsDocument, "recommendations"
     )
@@ -151,6 +157,8 @@ async def create_task(
         guideline_entries, "brand guidelines"
     )
 
+    # Filenames are join keys between the three multipart inputs. They are
+    # validated here, then replaced by server-owned IDs for filesystem access.
     filenames = [image.filename or "" for image in images]
     _validate_filename_matches(
         filenames, recommendations_by_filename, guidelines_by_filename
@@ -253,6 +261,8 @@ async def get_variant(
         or variant_path is None
         or not variant_path.is_file()
     ):
+        # Use the same response for unknown, unfinished, and missing artifacts;
+        # no server path or task detail is exposed at this boundary.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Variant not found."
         )

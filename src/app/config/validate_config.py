@@ -1,4 +1,9 @@
-"""Typed application configuration schema and validation."""
+"""Validate external configuration and produce application-facing settings.
+
+Private models mirror the sectioned TOML document. ``AppConfig`` is the flat,
+immutable object consumed by the rest of the application, keeping file layout
+details at this boundary.
+"""
 
 from collections.abc import Mapping
 from pathlib import Path
@@ -19,6 +24,7 @@ NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_len
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
+# Every external configuration section rejects typos and unexpected values.
 class _ConfigModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -49,7 +55,11 @@ class _ConfigDocument(_ConfigModel):
 
 
 class AppConfig(_ConfigModel):
-    """Immutable settings resolved from configuration and secret sources."""
+    """Immutable settings resolved from configuration and secret sources.
+
+    The object is intentionally flat so consumers do not depend on how values
+    are grouped in TOML.
+    """
 
     openai_api_key: SecretStr
     image_model: NonEmptyString
@@ -81,10 +91,23 @@ def validate_config(
     config_values: Mapping[str, object],
     api_key: object,
 ) -> AppConfig:
-    """Validate a complete non-secret document plus its separately loaded key."""
+    """Validate and flatten a complete TOML document plus its API key.
+
+    Args:
+        config_values: Parsed TOML with providers, limits, logging, and storage.
+        api_key: Secret resolved independently of the non-secret document.
+
+    Returns:
+        A flat, immutable configuration ready for application consumers.
+
+    Raises:
+        RuntimeError: If a section, field, value, or secret is invalid.
+    """
 
     try:
         document = _ConfigDocument.model_validate(config_values)
+        # Convert the human-readable MiB setting once at the boundary; upload
+        # code deals only in bytes and does not know about TOML units.
         return AppConfig(
             openai_api_key=api_key,
             image_model=document.providers.image_editor_model,

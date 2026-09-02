@@ -1,4 +1,8 @@
-"""OpenAI image-editing and schema-constrained visual evaluation calls."""
+"""Adapt application models to OpenAI image and Responses API requests.
+
+Prompt construction, provider payloads, and provider-response decoding stay in
+this module so the workflow remains independent of the OpenAI SDK.
+"""
 
 import asyncio
 import base64
@@ -107,7 +111,11 @@ def _data_url(image_bytes: bytes, path: Path) -> str:
 
 
 class OpenAIService:
-    """Perform the two provider roles through one long-lived async client."""
+    """Perform both AI roles through one long-lived asynchronous client.
+
+    The caller owns the client lifecycle. ``create_app`` creates and closes the
+    production client, while tests inject a deterministic stand-in.
+    """
 
     def __init__(
         self,
@@ -127,7 +135,16 @@ class OpenAIService:
         brand_guidelines: BrandGuidelines,
         repair_feedback: Evaluation | None = None,
     ) -> None:
-        """Edit the original creative and persist the returned image bytes."""
+        """Edit the original creative and persist the returned image bytes.
+
+        ``repair_feedback`` is already schema- and coverage-validated by the
+        workflow. When present, it augments the prompt but never changes the
+        source image.
+
+        Raises:
+            ValueError: If the provider omits image data or returns invalid
+                base64 content.
+        """
 
         original_bytes = await asyncio.to_thread(original_path.read_bytes)
         output_format: Literal["jpeg", "png"] = (
@@ -147,6 +164,7 @@ class OpenAIService:
             output_format=output_format,
             response_format="b64_json",
         )
+        # Treat provider output as untrusted even after a successful HTTP call.
         if not response.data or not response.data[0].b64_json:
             raise ValueError("Image provider returned no image data")
         try:
@@ -165,12 +183,19 @@ class OpenAIService:
         recommendations: list[Recommendation],
         brand_guidelines: BrandGuidelines,
     ) -> Evaluation:
-        """Compare both images and validate one structured result for all checks."""
+        """Compare both images and return one structured result for all checks.
+
+        The Responses SDK parses against ``Evaluation``. The workflow performs
+        the additional semantic check that returned IDs and criteria exactly
+        cover the request.
+        """
 
         original_bytes, variant_bytes = await asyncio.gather(
             asyncio.to_thread(original_path.read_bytes),
             asyncio.to_thread(variant_path.read_bytes),
         )
+        # One combined request gives every recommendation and brand check the
+        # same visual context and avoids inconsistent per-criterion judgments.
         response = await self._client.responses.parse(
             model=self._evaluation_model,
             instructions=(
