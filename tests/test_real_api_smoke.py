@@ -9,7 +9,10 @@ from app.config import load_config
 from app.ai_services import OpenAIService
 from app.schema_models import BrandGuidelines, Recommendation
 
+
 def real_api_enabled() -> bool:
+    """Return whether explicit opt-in and a usable key enable paid provider calls."""
+
     if os.environ.get("RUN_OPENAI_SMOKE_TEST") != "1":
         return False
     try:
@@ -30,6 +33,8 @@ RUN_REAL_API = real_api_enabled()
     ),
 )
 def test_real_api_single_creative_smoke(tmp_path):
+    """Exercise one paid edit and evaluation without visual image inspection."""
+
     original_path = tmp_path / "original.png"
     variant_path = tmp_path / "variant.png"
     image = Image.new("RGB", (256, 256), "white")

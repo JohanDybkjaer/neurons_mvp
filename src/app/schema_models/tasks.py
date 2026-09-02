@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.schema_models.evaluations import Evaluation
 
+# Shared hard per-image cap enforced by configuration, workflow, and result validation.
 MAX_ITERATIONS = 5
 
 

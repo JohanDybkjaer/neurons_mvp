@@ -41,6 +41,19 @@ APP_CONFIG_FILE=config/test.toml uv run uvicorn app.main:app --app-dir src
 `APP_CONFIG_FILE` is intentionally not placed in `.env`, keeping that file
 limited to secrets.
 
+## Runtime limits
+
+The task endpoint accepts one through ten images. The workflow processes at
+most two image pipelines at once, while generation and evaluation remain
+sequential within each pipeline.
+
+An iteration contains one generation and one evaluation, and the initial
+generation is iteration 1. Setting `max_iterations` to 1 disables repair
+attempts. After a failed evaluation, the next iteration uses the original
+creative and the latest failed checks as feedback; it never edits an earlier
+generated variant. Configuration may request up to five iterations, and the
+workflow enforces that same hard limit for direct callers.
+
 ## Code map
 
 - `api/` validates HTTP input and exposes health and task routes.

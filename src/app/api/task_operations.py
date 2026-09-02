@@ -26,6 +26,7 @@ from app.workflows import ImageWorkItem, run_task
 
 ModelType = TypeVar("ModelType", bound=BaseModel)
 FilenameEntry = TypeVar("FilenameEntry", RecommendationFile, BrandGuidelineFile)
+# Public request boundary. The workflow independently limits active pipelines to two.
 MAX_IMAGES = 10
 
 # Swagger UI uses OpenAPI's binary format marker to render operating-system
@@ -110,7 +111,7 @@ async def submit_task(
     brand_guidelines: UploadFile,
     api_prefix: str,
 ) -> TaskCreated:
-    """Validate task inputs, persist them, and schedule the shared workflow."""
+    """Validate one to ten matching uploads, persist them, and schedule processing."""
 
     app_config = cast(AppConfig, request.app.state.config)
     if not 1 <= len(images) <= MAX_IMAGES:

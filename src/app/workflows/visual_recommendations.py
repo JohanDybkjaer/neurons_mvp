@@ -140,6 +140,10 @@ async def _process_image(
 ) -> ImageResult:
     """Run bounded generation and evaluation iterations sequentially.
 
+    The initial generation and evaluation count as iteration 1. Every iteration
+    starts from the original creative; a failed, validated evaluation supplies
+    the feedback for the next iteration. This prevents cumulative image drift.
+
     The semaphore covers the complete pipeline rather than individual calls,
     ensuring no more than two creatives are in provider-backed processing at
     once while preserving step order within each creative.
@@ -235,7 +239,9 @@ async def run_task(
         work_items: One to ten validated creatives prepared by the API layer.
         service: AI editing and evaluation operations.
         timeout_seconds: Hard timeout independently applied to every operation.
-        max_iterations: Configured per-image generation and evaluation bound.
+        max_iterations: Configured per-image generation and evaluation bound,
+            including the initial iteration. Direct callers are capped at the
+            shared hard maximum.
     """
 
     if (
