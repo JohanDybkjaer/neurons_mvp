@@ -21,8 +21,10 @@ complete root-level `config/dev.toml` and `config/test.toml` files. The Python
 not define another set of defaults.
 
 Each TOML groups the active settings under `providers`, `limits`, `logging`,
-and `storage` sections. Workflow invariants are intentionally not exposed as
-configuration.
+and `storage` sections. `limits.max_iterations` is required and accepts an
+integer from 1 through 5. It controls the maximum generation-and-evaluation
+iterations for each image; the initial generation counts as iteration 1. The
+application still enforces five as a hard code limit.
 
 Select exactly one configuration document through `APP_CONFIG_FILE`:
 
@@ -43,7 +45,8 @@ limited to secrets.
 
 - `api/` validates HTTP input and exposes health and task routes.
 - `schema_models/` owns Pydantic schemas for inputs, evaluations, and tasks.
-- `workflows/` coordinates concurrent generation, evaluation, and one repair.
+- `workflows/` coordinates up to ten image pipelines, with two active at a
+  time, and bounded generation/evaluation iterations per image.
 - `ai_services/` contains provider adapters; `openai.py` owns OpenAI payloads.
 - `config/` selects, loads, and validates configuration once at startup.
 - `main.py` composes the application and owns long-lived process state.
@@ -68,3 +71,16 @@ recommendations, or brand guidelines replaces that bundled default. The normal
 
 The endpoint uses the configured AI provider and may incur API costs;
 automated tests use a fake service instead.
+
+## Real API smoke test
+
+The opt-in smoke test creates one small local creative, generates one variant,
+and evaluates it. It does not inspect the generated image visually. With a real
+API key available through the shell or ignored `.env` file, run:
+
+```shell
+APP_CONFIG_FILE=config/dev.toml RUN_OPENAI_SMOKE_TEST=1 uv run pytest -m real_api
+```
+
+The test makes paid provider calls. It is skipped unless
+`RUN_OPENAI_SMOKE_TEST=1` is set.

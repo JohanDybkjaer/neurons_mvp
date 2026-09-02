@@ -160,7 +160,6 @@ class OpenAIService:
                 brand_guidelines,
                 repair_feedback,
             ),
-            input_fidelity="high",
             output_format=output_format,
             response_format="b64_json",
         )

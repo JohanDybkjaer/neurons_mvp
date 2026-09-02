@@ -43,6 +43,7 @@ def test_generate_variant_calls_image_edit_and_writes_result(
     assert call["image"][0] == "original.png"
     assert call["image"][1] == png_bytes
     assert call["output_format"] == "png"
+    assert "input_fidelity" not in call
     assert "Brand guidelines (authoritative)" in call["prompt"]
     assert all(item.id in call["prompt"] for item in recommendations)
     assert all(
