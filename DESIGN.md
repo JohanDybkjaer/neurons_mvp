@@ -357,7 +357,10 @@ src/app/
     validate_config.py Typed settings schema and safe validation
   schema_models/
     __init__.py       Public schema-model exports
-    models.py         HTTP, upload, workflow-state, and AI-boundary models
+    inputs.py         Recommendation and brand-guideline input schemas
+    evaluations.py    Structured evaluator-output schemas
+    tasks.py          Task state and task-response schemas
+    misc.py           Small operational schemas, including health
   workflows/
     __init__.py       Public workflow exports
     visual_recommendations.py Two-image orchestration and single repair loop
