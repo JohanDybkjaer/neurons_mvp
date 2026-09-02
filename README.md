@@ -64,9 +64,10 @@ make dev PORT=8002
 ```
 
 Application logs continue to appear in the terminal and are also written to
-`runtime/logs/app.log`. Starting the API clears prior runtime tasks and logs,
-so this file contains only the current run. The `runtime/` directory is ignored
-by Git.
+`runtime/logs/app.log`. Starting the API clears prior runtime logs, so this
+file contains only the current run. Task artifacts remain under
+`runtime/tasks/` for manual inspection. The `runtime/` directory is ignored by
+Git.
 
 Check that the process is running:
 
@@ -296,5 +297,6 @@ APP_CONFIG_FILE=config/dev.toml RUN_OPENAI_SMOKE_TEST=1 uv run pytest -m real_ap
 | `examples/demo/` | Committed demo images and matching JSON documents. |
 
 The service runs as one Uvicorn worker with process-local task state. Restarting
-the process clears task status, task artifacts, and runtime logs; this is an
-intentional MVP limitation documented in [DESIGN.md](DESIGN.md).
+the process clears task status and runtime logs; prior task artifacts remain on
+disk but cannot be retrieved through the restarted API. This is an intentional
+MVP limitation documented in [DESIGN.md](DESIGN.md).

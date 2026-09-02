@@ -391,9 +391,9 @@ runtime/tasks/<task_id>/
 All directory and file names are generated or resolved by the server. Uploaded
 filenames are metadata and are never used directly as filesystem paths.
 
-Each application startup clears the configured task-artifact directory and the
-adjacent server-managed log directory before accepting requests. Runtime files
-therefore belong only to the current process run.
+Each application startup clears the adjacent server-managed log directory before
+accepting requests. Task directories remain on local disk for manual
+inspection, but task state is not restored after a restart.
 
 This MVP runs as one application process. The consequences of process-local
 state and storage are recorded explicitly under **Accepted limitations** rather
@@ -563,8 +563,8 @@ the README and technical discussion:
   pending or running work; tasks are not resumed.
 - The service runs one process with one worker. It does not support horizontal
   scaling or coordinate work across instances.
-- Inputs and variants use local disk. Artifacts are not durable, and startup
-  clears prior task directories and runtime logs.
+- Inputs and variants use local disk. Artifacts are not durable, task
+  directories are not removed automatically, and startup clears runtime logs.
 - A technical failure in any image pipeline fails the whole task. There is
   no partial-success response or automatic provider retry.
 - Image generation and visual evaluation are probabilistic. A passing brand

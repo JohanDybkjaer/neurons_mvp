@@ -131,7 +131,7 @@ def test_application_creates_runtime_log_file(tmp_path):
     )
 
 
-def test_application_startup_clears_prior_runtime_state(tmp_path):
+def test_application_startup_keeps_artifacts_and_clears_runtime_state(tmp_path):
     config = make_test_config(tmp_path)
     stale_task_file = tmp_path / "stale-task" / "inputs" / "original.png"
     stale_task_file.parent.mkdir(parents=True)
@@ -148,7 +148,7 @@ def test_application_startup_clears_prior_runtime_state(tmp_path):
     with TestClient(application):
         assert application.state.tasks == {}
         assert application.state.variant_paths == {}
-        assert not stale_task_file.exists()
+        assert stale_task_file.read_bytes() == b"stale task artifact"
         assert not stale_log_file.exists()
 
     log_output = (tmp_path.parent / "logs" / "app.log").read_text()
