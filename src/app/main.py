@@ -17,7 +17,7 @@ from app.openai_service import OpenAIService
 
 
 @contextmanager
-def _application_logging() -> Iterator[None]:
+def _application_logging(log_level: str) -> Iterator[None]:
     """Emit application logs to stdout for the application's lifetime."""
 
     application_logger = logging.getLogger("app")
@@ -26,7 +26,7 @@ def _application_logging() -> Iterator[None]:
     previous_level = application_logger.level
     previous_propagate = application_logger.propagate
     application_logger.addHandler(handler)
-    application_logger.setLevel(logging.INFO)
+    application_logger.setLevel(log_level)
     application_logger.propagate = False
     try:
         yield
@@ -47,8 +47,8 @@ def create_app(
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         """Create and close the application-owned provider client."""
 
-        with _application_logging():
-            active_config = config or load_config()
+        active_config = config or load_config()
+        with _application_logging(active_config.log_level):
             owned_client: AsyncOpenAI | None = None
             active_service = service
             if active_service is None:

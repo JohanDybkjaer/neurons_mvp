@@ -93,9 +93,9 @@ preserving the already-tested workflow.
   - Edit an original creative from its recommendations and brand guidelines.
   - Evaluate the original and variant using a schema-constrained vision
     response.
-- Extend the configuration package to load and validate only `OPENAI_API_KEY`,
-  `IMAGE_MODEL`, and `EVALUATION_MODEL`; keep environment reads out of route,
-  workflow, and provider methods.
+- Extend the configuration package to load and validate `OPENAI_API_KEY` as a
+  secret and one explicitly selected, complete non-secret TOML document; keep
+  configuration reads out of route, workflow, and provider methods.
 - Construct one asynchronous OpenAI client for the application and close it via
   the FastAPI lifespan.
 - Build a direct editing prompt without adding a planning stage.
@@ -134,8 +134,9 @@ Make the small service easy to run, inspect, and discuss in the interview.
 
 - Add a Dockerfile based on a small pinned Python image that installs from
   `uv.lock`, runs as a non-root user, and starts one Uvicorn worker.
-- Add `.dockerignore`, `.gitignore`, and `.env.example` entries needed by the
-  MVP.
+- Add `.dockerignore`, `.gitignore`, committed `config/dev.toml` and
+  `config/test.toml` files for non-secret settings, and a secret-only
+  `.env.example`, including a configurable standard-library logging level.
 - Configure Ruff formatting/linting and mypy for application code in
   `pyproject.toml`; keep the rule set small and document any necessary exclusion.
 - Add one minimal CI workflow that performs a frozen dependency install and
@@ -146,7 +147,7 @@ Make the small service easy to run, inspect, and discuss in the interview.
 - Write a concise README covering:
   - Local setup with `uv`.
   - Docker build and run commands.
-  - Required environment variables.
+  - The required secret and non-secret configuration.
   - The Swagger UI demonstration flow.
   - The asynchronous submit-and-poll behavior.
   - Accepted limitations from `DESIGN.md`.

@@ -40,8 +40,9 @@ easier to review and change without expanding the product scope:
 - `create_app` is the composition root. It constructs application-owned state
   and accepts configuration and the OpenAI adapter as dependencies, which keeps
   tests isolated without a dependency-injection framework.
-- The `config` package is the only place that reads environment variables.
-  Settings are typed, validated once at startup, and then passed explicitly.
+- The `config` package is the only place that reads the selected TOML document,
+  the local secret file, or environment variables. Settings are typed,
+  validated once at startup, and then passed explicitly.
 - Dependencies point inward: FastAPI handlers call the workflow, the workflow
   uses validated models and the narrow image-service contract, and provider
   request details stay in the OpenAI adapter. The workflow does not import or
@@ -252,27 +253,35 @@ The application uses the asynchronous OpenAI client so the two image pipelines
 can overlap network waits. Tests inject a deterministic fake service and never
 make real API calls.
 
-Runtime configuration is limited to environment variables:
+Non-secret runtime configuration uses one complete TOML document per deployed
+environment. The repository includes `config/dev.toml` and `config/test.toml`;
+the application loads exactly the path supplied through `APP_CONFIG_FILE` and
+does not merge files or branch on an environment name:
 
-```text
-OPENAI_API_KEY
-IMAGE_MODEL
-EVALUATION_MODEL
+```toml
+image_model = "gpt-image-2"
+evaluation_model = "gpt-5.6"
+log_level = "INFO"
+runtime_root = "runtime/tasks"
+max_image_bytes = 10485760
+provider_timeout_seconds = 120
 ```
 
-The configuration package maps these variables to one immutable, typed
-`AppConfig`. It fails fast with a concise error when required configuration is
-missing or invalid. Model names receive sensible defaults but remain
-configurable because model availability changes independently of the
-application. `.env.example` documents names and safe example values; secrets
-are never committed, and loading a local `.env` file is a developer convenience
-rather than a second configuration system.
+The only secret setting is `OPENAI_API_KEY`. `.env.example` documents that name
+with a safe placeholder, while the real value belongs in the ignored local
+`.env` file or the process/container environment. A process environment value
+takes precedence over `.env`. `APP_CONFIG_FILE` is required from the shell or
+deployment platform and selects one complete non-secret configuration file. It
+is not read from `.env`, which remains secret-only. Other non-secret environment
+values are ignored so individual settings still have one clear source.
 
-`AppConfig` also owns the validated operational defaults already used by the
-application: the runtime task root, image upload limit, and provider timeout.
-These values are supplied directly when constructing the application; they do
-not introduce additional environment variables. Tests construct `AppConfig`
-directly and never mutate process-wide environment state.
+The configuration package contains only the loader and the immutable, typed
+`AppConfig` schema and checker; it defines no runtime values. The selected TOML
+document is the single source of non-secret setting values. Loading fails fast
+with a concise error when no file is selected, or when the selected file is
+missing, malformed, incomplete, or contains unknown settings.
+Tests can construct `AppConfig` directly or pass explicit file paths without
+mutating process-wide environment state.
 
 ## Storage and task state
 
@@ -333,7 +342,8 @@ src/app/
       routes.py       Versioned task endpoints and request validation
   config/
     __init__.py       Public configuration exports
-    settings.py       Environment loading and validated application settings
+    load_config.py    TOML selection plus secret loading
+    validate_config.py Typed settings schema and safe validation
   main.py             Composition root and in-memory task registry
   models.py           Request, task, and evaluation models
   workflow.py         Two-image orchestration and single repair loop
@@ -341,6 +351,9 @@ src/app/
 tests/
   test_api.py
   test_workflow.py
+config/
+  dev.toml           Complete non-secret dev settings
+  test.toml          Complete non-secret test-deployment settings
 Dockerfile
 pyproject.toml
 README.md

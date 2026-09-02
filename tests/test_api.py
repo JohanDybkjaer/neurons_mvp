@@ -1,5 +1,6 @@
 import json
 import shutil
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -16,10 +17,18 @@ TASKS_PATH = "/api/v1/tasks"
 
 
 def make_test_config(tmp_path, **overrides):
+    values = {
+        "image_model": "test-image-model",
+        "evaluation_model": "test-evaluation-model",
+        "log_level": "INFO",
+        "runtime_root": tmp_path,
+        "max_image_bytes": 10 * 1024 * 1024,
+        "provider_timeout_seconds": 120,
+        **overrides,
+    }
     return AppConfig(
         openai_api_key=TEST_API_KEY,
-        runtime_root=tmp_path,
-        **overrides,
+        **values,
     )
 
 
@@ -168,6 +177,34 @@ def test_workflow_step_metadata_is_logged_to_stdout(
     assert "creative.png" not in output
 
 
+def test_configured_warning_level_suppresses_success_logs(
+    capsys,
+    tmp_path,
+    png_bytes,
+    recommendations,
+    brand_guidelines,
+):
+    application = create_app(
+        service=RecordingService(),
+        config=make_test_config(tmp_path, log_level="WARNING"),
+    )
+    images, recommendations_file, guidelines_file = upload_payload(
+        png_bytes,
+        recommendations,
+        brand_guidelines,
+        ("creative.png",),
+    )
+
+    with TestClient(application) as client:
+        response = client.post(
+            TASKS_PATH,
+            files=[*images, recommendations_file, guidelines_file],
+        )
+
+    assert response.status_code == 202
+    assert "app.workflow" not in capsys.readouterr().out
+
+
 def test_invalid_json_is_rejected(tmp_path, png_bytes):
     client = TestClient(create_app(config=make_test_config(tmp_path)))
     response = client.post(
@@ -294,26 +331,29 @@ def test_unknown_task_and_variant_return_safe_not_found(tmp_path):
     assert client.get(f"{TASKS_PATH}/not-a-task/variants/image_1").status_code == 404
 
 
-def test_configuration_rejects_non_positive_limits():
+def test_configuration_rejects_non_positive_limits(tmp_path):
     with pytest.raises(ValidationError):
-        AppConfig(openai_api_key=TEST_API_KEY, max_image_bytes=0)
+        make_test_config(tmp_path, max_image_bytes=0)
 
     with pytest.raises(ValidationError):
-        AppConfig(
-            openai_api_key=TEST_API_KEY,
-            provider_timeout_seconds=0,
-        )
+        make_test_config(tmp_path, provider_timeout_seconds=0)
 
 
-def test_missing_runtime_configuration_fails_startup_safely(monkeypatch):
+def test_missing_runtime_configuration_fails_startup_safely(monkeypatch, tmp_path):
     secret = "must-not-leak"
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        (Path("config/dev.toml").read_text()).replace(
+            'image_model = "gpt-image-2"',
+            'image_model = ""',
+        )
+    )
 
     def invalid_config():
         return load_config(
-            {
-                "OPENAI_API_KEY": secret,
-                "IMAGE_MODEL": "",
-            }
+            {"OPENAI_API_KEY": secret},
+            env_file=None,
+            config_file=config_file,
         )
 
     monkeypatch.setattr("app.main.load_config", invalid_config)

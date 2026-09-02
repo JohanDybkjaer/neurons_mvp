@@ -1,0 +1,6 @@
+image_model = "gpt-image-2"
+evaluation_model = "gpt-5.6"
+log_level = "WARNING"
+max_image_bytes = 10485760
+provider_timeout_seconds = 120
+runtime_root = "runtime/test-tasks" # Isolated storage for a deployed test instance

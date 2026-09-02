@@ -9,16 +9,25 @@ from app.config import load_config
 from app.models import BrandGuidelines, Recommendation
 from app.openai_service import OpenAIService
 
-RUN_REAL_API = (
-    os.environ.get("RUN_OPENAI_SMOKE_TEST") == "1"
-    and bool(os.environ.get("OPENAI_API_KEY"))
-)
+def real_api_enabled() -> bool:
+    if os.environ.get("RUN_OPENAI_SMOKE_TEST") != "1":
+        return False
+    try:
+        return bool(load_config().openai_api_key.get_secret_value())
+    except RuntimeError:
+        return False
+
+
+RUN_REAL_API = real_api_enabled()
 
 
 @pytest.mark.real_api
 @pytest.mark.skipif(
     not RUN_REAL_API,
-    reason="Set RUN_OPENAI_SMOKE_TEST=1 and OPENAI_API_KEY to enable.",
+    reason=(
+        "Set RUN_OPENAI_SMOKE_TEST=1, OPENAI_API_KEY, and APP_CONFIG_FILE "
+        "to enable."
+    ),
 )
 def test_real_api_single_creative_smoke(tmp_path):
     original_path = tmp_path / "original.png"
