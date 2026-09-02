@@ -9,7 +9,7 @@ from typing import Literal
 
 from openai import AsyncOpenAI
 
-from app.models import BrandGuidelines, Evaluation, Recommendation
+from app.schema_models import BrandGuidelines, Evaluation, Recommendation
 
 
 def _editing_prompt(

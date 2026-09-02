@@ -4,8 +4,8 @@ import shutil
 
 import pytest
 
-from app.models import TaskState, TaskStatus
-from app.workflow import ImageWorkItem, run_task
+from app.schema_models import TaskState, TaskStatus
+from app.workflows import ImageWorkItem, run_task
 from conftest import make_evaluation, write_original
 
 
@@ -17,7 +17,7 @@ def workflow_log_records():
         def emit(self, record):
             records.append(record)
 
-    logger = logging.getLogger("app.workflow")
+    logger = logging.getLogger("app.workflows.visual_recommendations")
     previous_level = logger.level
     previous_propagate = logger.propagate
     handler = RecordHandler()

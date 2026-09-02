@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import ValidationError
 
-from app.openai_service import OpenAIService
+from app.ai_services import OpenAIService
 from conftest import make_evaluation, write_original
 
 

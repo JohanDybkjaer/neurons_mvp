@@ -21,7 +21,7 @@ from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ValidationError
 
 from app.config import AppConfig
-from app.models import (
+from app.schema_models import (
     BrandGuidelineFile,
     BrandGuidelinesDocument,
     RecommendationFile,
@@ -30,7 +30,7 @@ from app.models import (
     TaskState,
     TaskStatus,
 )
-from app.workflow import ImageWorkItem, run_task
+from app.workflows import ImageWorkItem, run_task
 
 API_V1_PREFIX = "/api/v1"
 

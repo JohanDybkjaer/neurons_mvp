@@ -6,8 +6,8 @@ from openai import AsyncOpenAI
 from PIL import Image, ImageDraw
 
 from app.config import load_config
-from app.models import BrandGuidelines, Recommendation
-from app.openai_service import OpenAIService
+from app.ai_services import OpenAIService
+from app.schema_models import BrandGuidelines, Recommendation
 
 def real_api_enabled() -> bool:
     if os.environ.get("RUN_OPENAI_SMOKE_TEST") != "1":

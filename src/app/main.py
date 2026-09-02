@@ -12,8 +12,8 @@ from openai import AsyncOpenAI
 from app.api import health_router
 from app.api.v1 import router as v1_router
 from app.config import AppConfig, load_config
-from app.models import TaskState
-from app.openai_service import OpenAIService
+from app.ai_services import OpenAIService
+from app.schema_models import TaskState
 
 
 @contextmanager

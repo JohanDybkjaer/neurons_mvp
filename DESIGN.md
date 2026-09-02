@@ -54,11 +54,11 @@ easier to review and change without expanding the product scope:
 - Formatting, linting, static type checking, and deterministic tests form the
   automated quality gate.
 
-Packages are introduced only for a real ownership boundary. Configuration has
-one because environment-backed settings have a distinct interface. API routing
-has one to make the public version boundary visible. The other concerns remain
-single modules until their size or responsibilities provide a concrete reason
-to split them.
+Packages make the main concerns visible when skimming the repository: API
+routing, configuration, schema-backed models, workflow orchestration, and AI
+service adapters. Each package keeps a small public interface and avoids
+additional internal layers until its responsibilities provide a concrete reason
+to split further.
 
 ## API
 
@@ -355,10 +355,16 @@ src/app/
     __init__.py       Public configuration exports
     load_config.py    TOML selection plus secret loading
     validate_config.py Typed settings schema and safe validation
+  schema_models/
+    __init__.py       Public schema-model exports
+    models.py         HTTP, upload, workflow-state, and AI-boundary models
+  workflows/
+    __init__.py       Public workflow exports
+    visual_recommendations.py Two-image orchestration and single repair loop
+  ai_services/
+    __init__.py       Public AI-service exports
+    openai.py          OpenAI image-editing and evaluation adapter
   main.py             Composition root and in-memory task registry
-  models.py           Request, task, and evaluation models
-  workflow.py         Two-image orchestration and single repair loop
-  openai_service.py   Image-editing and evaluation calls
 tests/
   test_api.py
   test_workflow.py
@@ -372,11 +378,11 @@ DESIGN.md
 .github/workflows/ci.yml
 ```
 
-These small application concerns are enough. The `api/` and `config/` packages
-make active boundaries visually explicit, but additional repositories, domain
-layers, dependency-injection frameworks, and provider abstractions are excluded.
-Package `__init__.py` files expose only the routers or settings used by callers;
-callers do not depend on internal file layout.
+These small application concerns are enough. Additional repositories, domain
+layers, dependency-injection frameworks, and generalized provider abstractions
+are excluded. Package `__init__.py` files expose only the models, workflows,
+adapters, routers, or settings used by callers; callers do not depend on
+internal file layout.
 
 ## Tests
 

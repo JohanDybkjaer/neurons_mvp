@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
-from app.models import (
+from app.ai_services import OpenAIService
+from app.schema_models import (
     BrandGuidelines,
     Evaluation,
     ImageResult,
@@ -17,7 +18,6 @@ from app.models import (
     TaskState,
     TaskStatus,
 )
-from app.openai_service import OpenAIService
 
 ReturnType = TypeVar("ReturnType")
 LOGGER = logging.getLogger(__name__)

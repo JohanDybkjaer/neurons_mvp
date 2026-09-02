@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from app.config import AppConfig, load_config
 from app.main import create_app
-from app.models import TaskStatus
+from app.schema_models import TaskStatus
 from conftest import TEST_API_KEY, make_evaluation, upload_payload
 
 TASKS_PATH = "/api/v1/tasks"
@@ -202,7 +202,7 @@ def test_configured_warning_level_suppresses_success_logs(
         )
 
     assert response.status_code == 202
-    assert "app.workflow" not in capsys.readouterr().out
+    assert "app.workflows.visual_recommendations" not in capsys.readouterr().out
 
 
 def test_invalid_json_is_rejected(tmp_path, png_bytes):
