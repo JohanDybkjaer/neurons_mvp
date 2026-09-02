@@ -23,6 +23,7 @@ def make_test_config(tmp_path, **overrides):
         "log_level": "INFO",
         "runtime_root": tmp_path,
         "max_image_bytes": 10 * 1024 * 1024,
+        "max_iterations": 2,
         "provider_timeout_seconds": 120,
         **overrides,
     }
@@ -97,7 +98,7 @@ def test_health_swagger_and_openapi_expose_contract(tmp_path):
     assert schema["paths"][TASKS_PATH]["post"]["responses"]["202"]
 
 
-def test_two_image_task_completes_with_retrievable_variants(
+def test_ten_image_task_completes_with_retrievable_variants(
     tmp_path, png_bytes, recommendations, brand_guidelines
 ):
     service = RecordingService()
@@ -108,7 +109,10 @@ def test_two_image_task_completes_with_retrievable_variants(
         )
     )
     images, recommendations_file, guidelines_file = upload_payload(
-        png_bytes, recommendations, brand_guidelines
+        png_bytes,
+        recommendations,
+        brand_guidelines,
+        tuple(f"creative_{index}.png" for index in range(1, 11)),
     )
 
     response = client.post(
@@ -122,7 +126,7 @@ def test_two_image_task_completes_with_retrievable_variants(
     assert task_response.status_code == 200
     task = task_response.json()
     assert task["status"] == "completed"
-    assert len(task["results"]) == 2
+    assert len(task["results"]) == 10
     assert all(result["attempts"] == 1 for result in task["results"])
     assert all(result["evaluation"]["overall_pass"] for result in task["results"])
     assert all(
@@ -138,7 +142,7 @@ def test_two_image_task_completes_with_retrievable_variants(
         assert variant.status_code == 200
         assert variant.content == png_bytes
 
-    assert len(service.evaluation_calls) == 2
+    assert len(service.evaluation_calls) == 10
     assert all(call[1] == ["rec_1", "rec_2", "rec_3"] for call in service.evaluation_calls)
 
 
@@ -284,10 +288,10 @@ def test_mismatched_filenames_are_rejected(
     }
 
 
-def test_more_than_two_images_are_rejected(
+def test_more_than_ten_images_are_rejected(
     tmp_path, png_bytes, recommendations, brand_guidelines
 ):
-    filenames = ("one.png", "two.png", "three.png")
+    filenames = tuple(f"creative_{index}.png" for index in range(1, 12))
     images, recommendations_file, guidelines_file = upload_payload(
         png_bytes, recommendations, brand_guidelines, filenames
     )
@@ -298,7 +302,7 @@ def test_more_than_two_images_are_rejected(
     )
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "Upload one or two images."}
+    assert response.json() == {"detail": "Upload between one and ten images."}
 
 
 class FailingService(RecordingService):
@@ -343,6 +347,9 @@ def test_configuration_rejects_non_positive_limits(tmp_path):
 
     with pytest.raises(ValidationError):
         make_test_config(tmp_path, provider_timeout_seconds=0)
+
+    with pytest.raises(ValidationError):
+        make_test_config(tmp_path, max_iterations=0)
 
 
 def test_missing_runtime_configuration_fails_startup_safely(monkeypatch, tmp_path):

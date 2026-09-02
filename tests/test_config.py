@@ -16,6 +16,7 @@ def write_config(path: Path, **overrides: object) -> Path:
         "log_level": "INFO",
         "runtime_root": "runtime/tasks",
         "max_image_bytes": 10485760,
+        "max_iterations": 2,
         "provider_timeout_seconds": 120,
         **overrides,
     }
@@ -27,6 +28,7 @@ def write_config(path: Path, **overrides: object) -> Path:
         "",
         "[limits]",
         f'max_image_size_mb = {values["max_image_bytes"] / 1024 / 1024:g}',
+        f'max_iterations = {values["max_iterations"]!r}',
         "",
         "[logging]",
         f'level = {values["log_level"]!r}',
@@ -58,6 +60,7 @@ def test_load_config_reads_non_secrets_only_from_toml(tmp_path):
     assert config.log_level == "DEBUG"
     assert str(config.runtime_root) == "runtime/tasks"
     assert config.max_image_bytes == 10 * 1024 * 1024
+    assert config.max_iterations == 2
 
 
 @pytest.mark.parametrize(
@@ -82,6 +85,7 @@ def test_committed_configs_are_valid(
     assert config.evaluation_model == "gpt-5.6"
     assert config.log_level == expected_log_level
     assert str(config.runtime_root) == expected_runtime_root
+    assert config.max_iterations == 2
 
 
 def test_environment_selects_complete_config_file(tmp_path):
@@ -134,6 +138,9 @@ def test_env_file_rejects_non_secret_settings(tmp_path):
         ({"OPENAI_API_KEY": TEST_API_KEY}, {"evaluation_model": " "}),
         ({"OPENAI_API_KEY": TEST_API_KEY}, {"log_level": "TRACE"}),
         ({"OPENAI_API_KEY": TEST_API_KEY}, {"max_image_bytes": 0}),
+        ({"OPENAI_API_KEY": TEST_API_KEY}, {"max_iterations": 0}),
+        ({"OPENAI_API_KEY": TEST_API_KEY}, {"max_iterations": 6}),
+        ({"OPENAI_API_KEY": TEST_API_KEY}, {"max_iterations": "2"}),
     ],
 )
 def test_load_config_rejects_missing_or_invalid_values_safely(

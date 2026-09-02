@@ -132,6 +132,16 @@ Make the small service easy to run, inspect, and discuss in the interview.
 
 ### Deliverables
 
+- Extend task submission and demo overrides to accept one through ten images,
+  while retaining a two-pipeline concurrency bound per task.
+- Add the required `limits.max_iterations` TOML setting, validate it as an
+  integer from 1 through 5, and pass it explicitly into the shared workflow.
+- Replace the single-repair branch with a bounded iteration loop. Every
+  iteration generates from the original creative, evaluates all criteria, and
+  stops when it passes or reaches the configured limit. Enforce five as a hard
+  code ceiling for direct workflow callers as well.
+- Update deterministic tests for ten-image requests, two-pipeline concurrency,
+  configurable iteration limits, early success, and invalid limits.
 - Add a Dockerfile based on a small pinned Python image that installs from
   `uv.lock`, runs as a non-root user, and starts one Uvicorn worker.
 - Add `.dockerignore`, `.gitignore`, committed `config/dev.toml` and
@@ -152,7 +162,8 @@ Make the small service easy to run, inspect, and discuss in the interview.
   - The asynchronous submit-and-poll behavior.
   - Accepted limitations from `DESIGN.md`.
 - Run the full automated test suite.
-- Manually verify the supplied two-image request through Swagger UI.
+- Manually verify a ten-image request through Swagger UI after permission for a
+  visual inspection is obtained.
 - If credentials and budget are available, run the opt-in smoke test once and
   record only the outcome, not generated assets or secrets.
 
@@ -161,6 +172,7 @@ Make the small service easy to run, inspect, and discuss in the interview.
 - The image builds and starts successfully with one worker.
 - `/health` and `/docs` are reachable in the container.
 - The supplied files can be selected directly in Swagger UI.
+- Up to ten images can be selected for product or demo task submission.
 - A submitted task returns immediately and can be polled to a terminal state.
 - Successful variants can be downloaded from their returned URLs.
 - Ruff formatting and linting, mypy, and the default pytest suite pass locally

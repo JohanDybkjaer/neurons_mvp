@@ -52,8 +52,8 @@ def _editing_prompt(
         sections.extend(
             [
                 (
-                    "This is the single repair attempt. Start again from the "
-                    "supplied original creative, not from a previous variant."
+                    "This is a repair iteration. Start again from the supplied "
+                    "original creative, not from a previous variant."
                 ),
                 "Validated failed recommendation checks:\n"
                 + json.dumps(failed_recommendations, indent=2),

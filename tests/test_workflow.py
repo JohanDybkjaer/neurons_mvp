@@ -90,26 +90,23 @@ class ConcurrentService:
         return make_evaluation(recommendations, brand_guidelines, True)
 
 
-def test_two_pipelines_overlap_and_each_evaluation_is_combined(
+def test_ten_pipelines_are_limited_to_two_and_each_evaluation_is_combined(
     tmp_path, png_bytes, recommendations, brand_guidelines
 ):
     items = [
         make_work_item(
             tmp_path, f"image_{index}", png_bytes, recommendations, brand_guidelines
         )
-        for index in (1, 2)
+        for index in range(1, 11)
     ]
     service = ConcurrentService()
     task = TaskState(task_id="task-id", status=TaskStatus.pending)
 
-    asyncio.run(run_task(task, items, service, timeout_seconds=120))
+    asyncio.run(run_task(task, items, service, timeout_seconds=120, max_iterations=2))
 
     assert task.status == TaskStatus.completed
     assert service.maximum_active_generations == 2
-    assert service.evaluation_calls == [
-        ["rec_1", "rec_2", "rec_3"],
-        ["rec_1", "rec_2", "rec_3"],
-    ]
+    assert service.evaluation_calls == [["rec_1", "rec_2", "rec_3"]] * 10
 
 
 class RepairService:
@@ -155,7 +152,7 @@ def test_failed_first_evaluation_causes_one_repair_from_original(
     service = RepairService([False, True])
     task = TaskState(task_id="task-id", status=TaskStatus.pending)
 
-    asyncio.run(run_task(task, [item], service, timeout_seconds=120))
+    asyncio.run(run_task(task, [item], service, timeout_seconds=120, max_iterations=2))
 
     assert task.status == TaskStatus.completed
     assert task.results[0].attempts == 2
@@ -205,7 +202,7 @@ def test_failed_second_evaluation_is_final_and_task_is_completed(
     service = RepairService([False, False])
     task = TaskState(task_id="task-id", status=TaskStatus.pending)
 
-    asyncio.run(run_task(task, [item], service, timeout_seconds=120))
+    asyncio.run(run_task(task, [item], service, timeout_seconds=120, max_iterations=2))
 
     assert task.status == TaskStatus.completed
     assert task.error is None
@@ -219,6 +216,118 @@ def test_failed_second_evaluation_is_final_and_task_is_completed(
         for message in messages
     )
     assert any("step=task attempt=1 outcome=success" in message for message in messages)
+
+
+@pytest.mark.parametrize("max_iterations", range(1, 6))
+def test_repeated_failures_stop_at_each_configured_iteration_limit(
+    tmp_path,
+    png_bytes,
+    recommendations,
+    brand_guidelines,
+    max_iterations,
+):
+    item = make_work_item(
+        tmp_path, "image_1", png_bytes, recommendations, brand_guidelines
+    )
+    service = RepairService([False] * max_iterations)
+    task = TaskState(task_id="task-id", status=TaskStatus.pending)
+
+    asyncio.run(
+        run_task(
+            task,
+            [item],
+            service,
+            timeout_seconds=120,
+            max_iterations=max_iterations,
+        )
+    )
+
+    assert task.status == TaskStatus.completed
+    assert task.results[0].attempts == max_iterations
+    assert task.results[0].evaluation.overall_pass is False
+    assert len(service.generation_calls) == max_iterations
+    assert service.evaluation_calls == max_iterations
+    assert all(call[0] == item.original_path for call in service.generation_calls)
+
+
+def test_passing_repair_stops_before_the_configured_iteration_limit(
+    tmp_path, png_bytes, recommendations, brand_guidelines
+):
+    item = make_work_item(
+        tmp_path, "image_1", png_bytes, recommendations, brand_guidelines
+    )
+    service = RepairService([False, True, False, False, False])
+    task = TaskState(task_id="task-id", status=TaskStatus.pending)
+
+    asyncio.run(
+        run_task(
+            task,
+            [item],
+            service,
+            timeout_seconds=120,
+            max_iterations=5,
+        )
+    )
+
+    assert task.status == TaskStatus.completed
+    assert task.results[0].attempts == 2
+    assert task.results[0].evaluation.overall_pass is True
+    assert len(service.generation_calls) == 2
+    assert service.evaluation_calls == 2
+
+
+def test_direct_workflow_calls_cannot_exceed_the_hard_iteration_ceiling(
+    tmp_path, png_bytes, recommendations, brand_guidelines
+):
+    item = make_work_item(
+        tmp_path, "image_1", png_bytes, recommendations, brand_guidelines
+    )
+    service = RepairService([False] * 10)
+    task = TaskState(task_id="task-id", status=TaskStatus.pending)
+
+    asyncio.run(
+        run_task(
+            task,
+            [item],
+            service,
+            timeout_seconds=120,
+            max_iterations=10,
+        )
+    )
+
+    assert task.status == TaskStatus.completed
+    assert task.results[0].attempts == 5
+    assert len(service.generation_calls) == 5
+    assert service.evaluation_calls == 5
+
+
+@pytest.mark.parametrize("max_iterations", [0, -1, 1.5, "2", True])
+def test_invalid_direct_workflow_iteration_limits_make_no_provider_calls(
+    tmp_path,
+    png_bytes,
+    recommendations,
+    brand_guidelines,
+    max_iterations,
+):
+    item = make_work_item(
+        tmp_path, "image_1", png_bytes, recommendations, brand_guidelines
+    )
+    service = RepairService([])
+    task = TaskState(task_id="task-id", status=TaskStatus.pending)
+
+    with pytest.raises(ValueError, match="max_iterations"):
+        asyncio.run(
+            run_task(
+                task,
+                [item],
+                service,
+                timeout_seconds=120,
+                max_iterations=max_iterations,
+            )
+        )
+
+    assert service.generation_calls == []
+    assert service.evaluation_calls == 0
 
 
 class MalformedEvaluationService(RepairService):
@@ -250,6 +359,7 @@ def test_unvalidated_evaluator_output_cannot_control_workflow(
             [item],
             MalformedEvaluationService([]),
             timeout_seconds=120,
+            max_iterations=2,
         )
     )
 

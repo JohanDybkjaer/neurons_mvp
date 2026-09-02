@@ -74,7 +74,7 @@ def test_generate_variant_repair_prompt_uses_only_validated_failed_checks(
     )
 
     prompt = client.images.edit.await_args.kwargs["prompt"]
-    assert "repair attempt" in prompt
+    assert "repair iteration" in prompt
     assert "Start again from the supplied original creative" in prompt
     assert feedback.recommendations[0].reason in prompt
     assert feedback.brand_checks[0].reason in prompt

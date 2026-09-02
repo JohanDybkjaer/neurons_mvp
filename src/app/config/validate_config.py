@@ -12,16 +12,21 @@ from typing import Annotated, Literal
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Field,
     PositiveFloat,
     PositiveInt,
     SecretStr,
+    StrictInt,
     StringConstraints,
     ValidationError,
     field_validator,
 )
 
+from app.schema_models import MAX_ITERATIONS
+
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+IterationCount = Annotated[StrictInt, Field(ge=1, le=MAX_ITERATIONS)]
 
 
 # Every external configuration section rejects typos and unexpected values.
@@ -37,6 +42,7 @@ class _ProviderConfig(_ConfigModel):
 
 class _LimitsConfig(_ConfigModel):
     max_image_size_mb: PositiveInt
+    max_iterations: IterationCount
 
 
 class _LoggingConfig(_ConfigModel):
@@ -67,6 +73,7 @@ class AppConfig(_ConfigModel):
     log_level: LogLevel
     runtime_root: Path
     max_image_bytes: PositiveInt
+    max_iterations: IterationCount
     provider_timeout_seconds: PositiveFloat
 
     @field_validator("openai_api_key", mode="before")
@@ -115,6 +122,7 @@ def validate_config(
             log_level=document.logging.level,
             runtime_root=document.storage.artifact_root,
             max_image_bytes=document.limits.max_image_size_mb * 1024 * 1024,
+            max_iterations=document.limits.max_iterations,
             provider_timeout_seconds=document.providers.timeout_seconds,
         )
     except ValidationError:

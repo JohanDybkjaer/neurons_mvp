@@ -1,8 +1,8 @@
-"""Coordinate independent image pipelines and their bounded repair cycle.
+"""Coordinate independent image pipelines and their bounded iteration cycle.
 
 Provider payload construction stays in ``ai_services``. This module controls
-only validated workflow state: generate, evaluate, optionally repair once, and
-store a terminal result.
+only validated workflow state: generate, evaluate, repair within a cost bound,
+and store a terminal result.
 """
 
 import asyncio
@@ -19,6 +19,7 @@ from app.schema_models import (
     BrandGuidelines,
     Evaluation,
     ImageResult,
+    MAX_ITERATIONS,
     Recommendation,
     TaskState,
     TaskStatus,
@@ -135,8 +136,9 @@ async def _process_image(
     service: OpenAIService,
     semaphore: asyncio.Semaphore,
     timeout_seconds: float,
+    max_iterations: int,
 ) -> ImageResult:
-    """Run generation, evaluation, and at most one repair sequentially.
+    """Run bounded generation and evaluation iterations sequentially.
 
     The semaphore covers the complete pipeline rather than individual calls,
     ensuring no more than two creatives are in provider-backed processing at
@@ -144,47 +146,27 @@ async def _process_image(
     """
 
     started_at = time.perf_counter()
-    attempts = 1
+    attempts = 0
     try:
         async with semaphore:
-            await _run_step(
-                service.generate_variant(
-                    item.original_path,
-                    item.variant_path,
-                    item.recommendations,
-                    item.brand_guidelines,
-                ),
-                timeout_seconds,
-                task_id,
-                item.image_id,
-                "generation",
-                1,
-            )
-            evaluation = await _run_step(
-                _request_evaluation(item, service),
-                timeout_seconds,
-                task_id,
-                item.image_id,
-                "evaluation",
-                1,
-            )
-            if not evaluation.overall_pass:
-                attempts = 2
-                # A failed evaluation is feedback for exactly one regeneration.
-                # The source remains the original creative to avoid cumulative drift.
+            repair_feedback: Evaluation | None = None
+            evaluation: Evaluation | None = None
+            for attempts in range(1, max_iterations + 1):
+                # Every iteration starts from the original creative to avoid
+                # cumulative drift from an earlier generated variant.
                 await _run_step(
                     service.generate_variant(
                         item.original_path,
                         item.variant_path,
                         item.recommendations,
                         item.brand_guidelines,
-                        repair_feedback=evaluation,
+                        repair_feedback=repair_feedback,
                     ),
                     timeout_seconds,
                     task_id,
                     item.image_id,
                     "generation",
-                    2,
+                    attempts,
                 )
                 evaluation = await _run_step(
                     _request_evaluation(item, service),
@@ -192,8 +174,14 @@ async def _process_image(
                     task_id,
                     item.image_id,
                     "evaluation",
-                    2,
+                    attempts,
                 )
+                if evaluation.overall_pass:
+                    break
+                repair_feedback = evaluation
+
+        if evaluation is None:
+            raise RuntimeError("Image processing reached no evaluation")
 
         result = ImageResult(
             image_id=item.image_id,
@@ -235,6 +223,7 @@ async def run_task(
     work_items: list[ImageWorkItem],
     service: OpenAIService,
     timeout_seconds: float,
+    max_iterations: int,
 ) -> None:
     """Run image pipelines and mutate the supplied task to a terminal state.
 
@@ -243,11 +232,19 @@ async def run_task(
 
     Args:
         task: Process-local state updated in place for API polling.
-        work_items: One or two validated creatives prepared by the API layer.
+        work_items: One to ten validated creatives prepared by the API layer.
         service: AI editing and evaluation operations.
         timeout_seconds: Hard timeout independently applied to every operation.
+        max_iterations: Configured per-image generation and evaluation bound.
     """
 
+    if (
+        isinstance(max_iterations, bool)
+        or not isinstance(max_iterations, int)
+        or max_iterations < 1
+    ):
+        raise ValueError("max_iterations must be a positive integer")
+    bounded_iterations = min(max_iterations, MAX_ITERATIONS)
     started_at = time.perf_counter()
     image_count = len(work_items)
     task.status = TaskStatus.running
@@ -260,8 +257,8 @@ async def run_task(
         image_count,
     )
     try:
-        # The input boundary permits at most two items; the explicit semaphore
-        # keeps that concurrency guarantee local to the workflow as well.
+        # The API accepts up to ten items. Keeping the semaphore here also
+        # protects direct workflow callers from exceeding two active pipelines.
         semaphore = asyncio.Semaphore(2)
         task.results = list(
             await asyncio.gather(
@@ -272,6 +269,7 @@ async def run_task(
                         service,
                         semaphore,
                         timeout_seconds,
+                        bounded_iterations,
                     )
                     for item in work_items
                 )

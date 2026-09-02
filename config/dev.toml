@@ -4,9 +4,10 @@ image_editor_model = "gpt-image-2"
 evaluator_model = "gpt-5.6"
 timeout_seconds = 120
 
-# Upload validation limits. Workflow behavior remains fixed in application code.
+# Upload and iteration limits. The workflow also enforces five iterations in code.
 [limits]
 max_image_size_mb = 10
+max_iterations = 2
 
 # Application log verbosity; logs are written to stdout.
 [logging]

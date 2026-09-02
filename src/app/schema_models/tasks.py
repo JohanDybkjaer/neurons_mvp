@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 from app.schema_models.evaluations import Evaluation
 
+MAX_ITERATIONS = 5
+
 
 class TaskStatus(str, Enum):
     """Lifecycle states exposed by the polling API."""
@@ -22,7 +24,7 @@ class ImageResult(BaseModel):
     image_id: str
     source_filename: str
     variant_url: str
-    attempts: int
+    attempts: int = Field(ge=1, le=MAX_ITERATIONS)
     evaluation: Evaluation
 
 

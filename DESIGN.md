@@ -5,7 +5,8 @@
 Build a minimal viable, maintainable, containerised asynchronous FastAPI service
 that meets the requirements:
 
-- Accept marketing creatives, textual recommendations, and brand guidelines.
+- Accept one to ten marketing creatives per request, textual recommendations,
+  and brand guidelines.
 - Generate an edited visual variant for each creative.
 - Evaluate whether every recommendation was applied.
 - Evaluate whether the variant complies with the brand guidelines.
@@ -27,10 +28,16 @@ one small OpenAI adapter:
 2. **Visual evaluator** - compares the original and generated images and returns
    a structured decision for every recommendation and brand criterion.
 
-If the first variant fails evaluation, the editor may make exactly one repair
-attempt using the evaluator's feedback. This bounded feedback loop is the
-agentic part of the workflow. It does not require an agent framework, planner,
-tool-calling loop, or general-purpose state machine.
+If a variant fails evaluation, the editor uses the evaluator's feedback to
+repair it until evaluation passes or the configured iteration limit is reached.
+One iteration means one image-editing call followed by one evaluation call;
+the initial generation counts as iteration 1. The limit applies independently
+to each creative and is configurable from 1 to 5, with a hard ceiling of five
+iterations enforced in code to bound cost.
+
+This bounded feedback loop is the agentic part of the workflow. It does not
+require an agent framework, planner, tool-calling loop, or general-purpose state
+machine.
 
 ## Engineering baseline
 
@@ -80,7 +87,7 @@ interactive form presents system file pickers rather than text inputs.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `images` | One or two PNG/JPEG files | The supplied marketing creatives. |
+| `images` | One to ten PNG/JPEG files | The supplied marketing creatives. |
 | `recommendations` | JSON file | Recommendations grouped by image filename. |
 | `brand_guidelines` | JSON file | Brand guidelines grouped by image filename. |
 
@@ -102,7 +109,11 @@ Successful response: `202 Accepted`
 Returns the current task state. The possible states are `pending`, `running`,
 `completed`, and `failed`.
 
-A completed response contains one result per input image:
+A completed response contains one result per input image. `attempts` reports the
+actual number of iterations performed for that image, from 1 to the configured
+limit (never more than 5). `variant_url` and `evaluation` refer to its final
+iteration. Reaching the limit with `overall_pass: false` still produces a
+`completed` task; only technical execution errors produce `failed`.
 
 ```json
 {
@@ -160,34 +171,49 @@ recommendations, and brand-guideline uploads are optional. Omitting a field
 uses the corresponding committed demo file or files. Supplying that field
 replaces the default, so the Swagger form remains manually editable. Demo tasks
 use the same validation, workflow, in-memory state, and artifact storage as the
-versioned product API; the demo router adds no alternate processing behavior.
+versioned product API, including the limit of ten images per request. The demo
+router adds no alternate processing behavior.
 
 ## Asynchronous execution and parallelism
 
 The HTTP request must not wait for image generation. `POST /api/v1/tasks`
 records an in-memory task, schedules the workflow as a FastAPI background task,
-and returns immediately. The client polls `GET /api/v1/tasks/{task_id}`.
+and returns `202 Accepted` with a task ID immediately. Image processing continues
+after the response; the client polls `GET /api/v1/tasks/{task_id}` for results.
 
-The two image pipelines are independent and run concurrently. Work within one
-image pipeline stays sequential because each step depends on the preceding
-output.
+Each task contains one to ten independent image pipelines, with at most two
+pipelines processing concurrently per task. Additional images wait for a free
+pipeline slot. Work within one image pipeline stays sequential because each
+step depends on the preceding output.
+
+The diagram shows image processing after the request is accepted. The same flow
+runs for images 1 through `N` (at most ten), with two images active at a time.
+Each image starts at iteration 1 and has its own evaluation feedback. The
+iteration limit includes the initial generation and can never exceed five.
 
 ```mermaid
-flowchart LR
-    POST["POST /api/v1/tasks"] --> BG["Background task"]
-    BG --> I1["Process image 1"]
-    BG --> I2["Process image 2"]
-    I1 --> G1["Generate"] --> E1["Evaluate all criteria"] --> R1{"Passed?"}
-    I2 --> G2["Generate"] --> E2["Evaluate all criteria"] --> R2{"Passed?"}
-    R1 -->|yes| D1["Done"]
-    R2 -->|yes| D2["Done"]
-    R1 -->|no| F1["One repair"] --> E1B["Re-evaluate"] --> D1
-    R2 -->|no| F2["One repair"] --> E2B["Re-evaluate"] --> D2
+flowchart TD
+    A["Accepted request"] -->|"Images 1 ... N"| G["Generate from<br/>original image"]
+    G --> E["Evaluate<br/>all criteria"]
+    E --> P{"Passed?"}
+    P -->|Yes| D["Save final result"]
+    P -->|No| L{"Limit reached?"}
+    L -->|Yes| D
+    L -->|No| F["Use latest<br/>failed checks"]
+    F -->|"Next iteration"| G
 ```
 
-The workflow uses `asyncio.gather` with at most two concurrent image pipelines.
-This is deliberately bounded because image generation is the slowest and most
-rate-limit-sensitive operation.
+Each evaluation is validated before either decision. A failed evaluation with
+iterations remaining feeds back into image generation, which uses the original
+image and the latest failed checks. Both exit paths save the last image and its
+evaluation, including a failing evaluation when the limit is reached.
+
+The workflow uses `asyncio.gather` for all uploaded images and a semaphore of
+two held for each image's complete pipeline, including its repair iterations.
+When a pipeline finishes, a waiting image can start. The task completes after
+all image pipelines finish and contains one result per uploaded image. This
+concurrency is deliberately bounded because image generation is the slowest
+and most rate-limit-sensitive operation.
 
 Recommendation checks are not parallelised into separate model calls. The
 evaluator receives the original image, generated image, complete recommendation
@@ -199,9 +225,14 @@ structured result containing all checks. This choice:
 - Avoids conflicting judgments from separate evaluator calls.
 - Keeps the evaluation schema and error handling small.
 
-For the supplied two-image, three-recommendation example, a successful task uses
-two image-editing calls and two evaluation calls. A failed first attempt adds at
-most one image-editing and one evaluation call for that image.
+For the supplied two-image, three-recommendation example, a task that passes on
+both first attempts uses two image-editing calls and two evaluation calls.
+Each additional iteration adds one image-editing call and one evaluation call
+for that image. With a configured iteration limit of `K`, each creative uses at
+most `K` editing calls and `K` evaluation calls. A task with `N` images uses at
+most `N × K` calls of each kind. At the hard ceiling of five iterations, a
+ten-image task uses at most 50 editing calls and 50 evaluation calls in total.
+This bounds calls per task, not a monetary amount or spending across tasks.
 
 ## Workflow
 
@@ -213,12 +244,23 @@ For each image:
    image under the task directory.
 4. Ask the evaluator to compare the original and variant.
 5. Validate the evaluator's structured response with Pydantic.
-6. If `overall_pass` is false, make one repair from the original image using the
-   failed checks as additional instructions, then evaluate once more.
-7. Store the final result in the in-memory task record.
+6. Stop immediately if `overall_pass` is true or the iteration limit is reached.
+7. Otherwise, increment the iteration count and repeat steps 3–6, adding the
+   failed checks from the latest validated evaluation to the editing prompt.
+8. Store the final variant, its evaluation, and the actual iteration count as
+   `attempts` in the in-memory task record, whether that evaluation passes or
+   fails.
 
 Every initial generation and repair starts from the original image. This avoids
-cumulative visual drift.
+cumulative visual drift. Each repair retains all original recommendations and
+brand guidelines and uses only the latest evaluation as repair feedback. Every
+iteration evaluates all criteria again, including those that passed previously.
+The workflow returns the last evaluated variant without ranking attempts or
+exposing an attempt history.
+
+A technical failure during any iteration stops that image pipeline and fails
+the task with a safe error. Repairs follow failed visual evaluations; they are
+not retries for provider errors, timeouts, or invalid evaluator output.
 
 ## Data models
 
@@ -266,7 +308,7 @@ One `OpenAIService` owns both provider calls:
 - Evaluation uses the Responses API with a vision-capable model and a strict
   JSON Schema response matching `Evaluation`.
 
-The application uses the asynchronous OpenAI client so the two image pipelines
+The application uses the asynchronous OpenAI client so active image pipelines
 can overlap network waits. Tests inject a deterministic fake service and never
 make real API calls.
 
@@ -283,6 +325,7 @@ timeout_seconds = 120
 
 [limits]
 max_image_size_mb = 10
+max_iterations = 2
 
 [logging]
 level = "INFO"
@@ -300,16 +343,36 @@ is not read from `.env`, which remains secret-only. Other non-secret environment
 values are ignored so individual settings still have one clear source.
 
 The configuration package contains only the loader and the immutable, typed
-`AppConfig` schema and checker; it defines no runtime values. The selected TOML
-document is the single source of non-secret setting values. Loading fails fast
-with a concise error when no file is selected, or when the selected file is
-missing, malformed, incomplete, or contains unknown settings.
+`AppConfig` schema and checker; it defines no adjustable runtime defaults. The
+selected TOML document is the single source of non-secret setting values.
+Loading fails fast with a concise error when no file is selected, or when the
+selected file is missing, malformed, incomplete, or contains unknown settings.
 Tests can construct `AppConfig` directly or pass explicit file paths without
 mutating process-wide environment state.
 
-Only values that are genuinely adjustable are exposed. The two-image limit,
-two-pipeline concurrency bound, and single repair attempt remain workflow
-invariants rather than environment-specific configuration.
+`limits.max_iterations` is a required TOML integer from 1 through 5, mapped to
+`AppConfig.max_iterations`. Both committed configuration files should set it to
+`2` initially, preserving the existing maximum of one initial generation plus
+one repair. A value of `1` disables repairs; `5` permits up to four repairs.
+Missing values, booleans, strings, fractional values, and integers outside the
+range fail startup with a safe configuration error rather than being coerced or
+silently clamped.
+
+The immutable setting is passed explicitly from `create_app` through task
+scheduling to the workflow. Product and demo tasks use the same setting; there
+is no per-request override. Configuration changes take effect after restart.
+
+The maximum allowed value is a code constant, `MAX_ITERATIONS = 5`, not another
+configuration setting. Both configuration validation and the workflow use this
+ceiling. The workflow also bounds its loop by
+`min(max_iterations, MAX_ITERATIONS)` so a value above five cannot cause a sixth
+iteration even if startup validation is bypassed by a direct internal call.
+Direct workflow calls with a non-integer or non-positive limit fail before any
+provider call.
+
+Only values that are genuinely adjustable are exposed. The ten-image limit,
+two-pipeline concurrency bound, and five-iteration ceiling remain fixed code
+invariants.
 
 ## Storage and task state
 
@@ -333,7 +396,7 @@ than addressed with infrastructure outside the assignment scope.
 
 Validation is intentionally limited to inexpensive system-boundary checks:
 
-- Accept one or two images.
+- Accept one to ten images; reject zero images or more than ten with `422`.
 - Limit upload size.
 - Decode each image and accept only PNG or JPEG.
 - Parse both JSON files with Pydantic.
@@ -384,7 +447,7 @@ src/app/
     misc.py           Small operational schemas, including health
   workflows/
     __init__.py       Public workflow exports
-    visual_recommendations.py Two-image orchestration and single repair loop
+    visual_recommendations.py Image orchestration and bounded iteration loop
   ai_services/
     __init__.py       Public AI-service exports
     openai.py          OpenAI image-editing and evaluation adapter
@@ -414,12 +477,31 @@ internal file layout.
 
 The default test suite uses a fake OpenAI service and covers:
 
-1. A valid upload returns `202` and later completes with two image results.
-2. The two image pipelines can be in flight concurrently.
+1. Valid uploads of 1, 2, and 10 images return `202` and later complete with one
+   retrievable result per image. Product and demo uploads reject more than ten
+   images; product uploads also reject zero images. Omitted demo images use the
+   committed defaults.
+2. A ten-image task processes all images with no more than two pipelines active
+   at once. Two pipelines can overlap, waiting images start as slots become
+   free, and repair iterations retain their pipeline's slot.
 3. One evaluator call receives all recommendations for its image.
-4. A failed evaluation triggers no more than one repair.
-5. Invalid JSON or an invalid image is rejected.
-6. A provider exception marks the task as failed without exposing secrets.
+4. Limits of 1, 2, 3, 4, and 5 bound the number of generation/evaluation pairs
+   independently per image, including the initial attempt. A passing evaluation
+   stops immediately, even when further iterations are available.
+5. Repeated failures stop exactly at the configured limit, return the last
+   variant and evaluation with the correct `attempts`, and leave the task
+   `completed` with `overall_pass: false`.
+6. Every repair uses the original creative, all recommendations and guidelines,
+   and the latest validated evaluation; each evaluation checks all criteria.
+7. Configuration rejects missing or invalid iteration limits, including values
+   outside 1–5 and non-integers. A direct workflow call above the ceiling never
+   makes a sixth generation or evaluation call; invalid non-integer or
+   non-positive workflow limits make no provider calls.
+8. Product and demo task scheduling both pass the configured iteration limit
+   through to the workflow.
+9. Invalid JSON or an invalid image is rejected.
+10. A provider exception, timeout, or invalid evaluator output at any iteration
+    marks the task as failed without further repairs or exposing secrets.
 
 One optional, explicitly enabled smoke test may call the real OpenAI API with a
 single supplied creative.
@@ -446,7 +528,8 @@ storage are not required.
 - Authentication, users, or multi-tenancy.
 - A distributed task queue.
 - A planning agent.
-- More than one generated variant per creative, except the bounded repair.
+- Multiple candidates per iteration, attempt-history APIs, or selection of the
+  best among generated attempts.
 - Parallel evaluator calls per recommendation.
 - Automatic provider retries or exponential backoff.
 - Pixel-perfect proof that logos, faces, products, or typography are unchanged.
@@ -463,13 +546,13 @@ the README and technical discussion:
   scaling or coordinate work across instances.
 - Inputs and variants use local disk. Artifacts are not durable, and task
   directories are not removed automatically.
-- A technical failure in either image pipeline fails the whole task. There is
+- A technical failure in any image pipeline fails the whole task. There is
   no partial-success response or automatic provider retry.
 - Image generation and visual evaluation are probabilistic. A passing brand
   evaluation is a model judgment, not pixel-perfect proof of compliance.
-- Each request is limited to two creatives, one initial variant per creative,
-  and at most one repair; the service does not search for the best of several
-  candidates.
+- Each request is limited to ten creatives and at most five iterations per
+  creative, including the initial generation. The service returns the last
+  evaluated variant; more iterations do not guarantee a passing result.
 - There is no authentication or tenant isolation, so this service is intended
   for a controlled demo environment rather than public deployment.
 - Swagger UI is the only user interface, and clients must poll for completion.
@@ -480,11 +563,19 @@ The MVP is complete when:
 
 - It builds and runs in Docker.
 - Swagger UI accepts the two supplied creatives and two supplied JSON files.
+- Product and demo requests support up to ten images with matching JSON inputs,
+  and reject requests exceeding that limit.
 - Submission returns `202` without waiting for model work.
-- Both image pipelines run concurrently.
+- Image pipelines run with a maximum concurrency of two per task, and all
+  accepted images are processed.
 - Each creative produces a retrievable variant and structured evaluation.
 - Every recommendation and brand criterion appears in the evaluation result.
-- At most one repair is attempted per image.
+- The TOML iteration limit accepts integers from 1 through 5 and is applied to
+  both product and demo tasks. Each image stops when evaluation passes or its
+  limit is reached; code prevents more than five iterations per image.
+- Final responses report the actual iteration count and the last evaluated
+  variant, with `completed` used even when the iteration limit is exhausted
+  without passing evaluation.
 - Automated tests pass without network access or an API key.
 - Formatting, linting, and static type checks pass locally and in CI.
 - The container runs as a non-root user with dependencies installed from the

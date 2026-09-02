@@ -29,7 +29,7 @@ async def create_task(
     images: Annotated[
         list[UploadFile],
         File(
-            description="One or two PNG/JPEG creatives",
+            description="One to ten PNG/JPEG creatives",
             json_schema_extra={"items": BINARY_FILE_SCHEMA},
         ),
     ],

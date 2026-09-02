@@ -45,6 +45,7 @@ def make_demo_config(tmp_path) -> AppConfig:
         log_level="WARNING",
         runtime_root=tmp_path,
         max_image_bytes=10 * 1024 * 1024,
+        max_iterations=2,
         provider_timeout_seconds=5,
     )
 

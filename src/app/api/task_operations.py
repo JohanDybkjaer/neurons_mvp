@@ -26,6 +26,7 @@ from app.workflows import ImageWorkItem, run_task
 
 ModelType = TypeVar("ModelType", bound=BaseModel)
 FilenameEntry = TypeVar("FilenameEntry", RecommendationFile, BrandGuidelineFile)
+MAX_IMAGES = 10
 
 # Swagger UI uses OpenAPI's binary format marker to render operating-system
 # file pickers. Pydantic otherwise emits only contentMediaType for UploadFile.
@@ -112,10 +113,10 @@ async def submit_task(
     """Validate task inputs, persist them, and schedule the shared workflow."""
 
     app_config = cast(AppConfig, request.app.state.config)
-    if not 1 <= len(images) <= 2:
+    if not 1 <= len(images) <= MAX_IMAGES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Upload one or two images.",
+            detail="Upload between one and ten images.",
         )
 
     # Parse both documents before writing files so malformed requests leave no
@@ -199,6 +200,7 @@ async def submit_task(
         work_items,
         request.app.state.service,
         app_config.provider_timeout_seconds,
+        app_config.max_iterations,
     )
     return TaskCreated(
         task_id=task_id,
