@@ -53,15 +53,24 @@ OPENAI_API_KEY=your_api_key_here
 Start the development configuration:
 
 ```shell
-# Select the complete non-secret configuration and start one Uvicorn worker.
-APP_CONFIG_FILE=config/dev.toml uv run uvicorn app.main:app --app-dir src
+# Select the committed development configuration and start one Uvicorn worker.
+make dev
 ```
+
+The launcher defaults to port 8001. To use another local port:
+
+```shell
+make dev PORT=8002
+```
+
+Application logs continue to appear in the terminal and are also appended to
+`runtime/logs/app.log`. The `runtime/` directory is ignored by Git.
 
 Check that the process is running:
 
 ```shell
 # The health endpoint never calls the provider.
-curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8001/health
 ```
 
 Expected response:
@@ -72,7 +81,7 @@ Expected response:
 }
 ```
 
-Open [Swagger UI](http://127.0.0.1:8000/docs) to submit and inspect requests
+Open [Swagger UI](http://127.0.0.1:8001/docs) to submit and inspect requests
 interactively. The route descriptions, field descriptions, response examples,
 and response schemas are generated from FastAPI and Pydantic metadata.
 
@@ -88,7 +97,7 @@ Submit the bundled demo only when you are ready for paid calls:
 
 ```shell
 # Submit the two bundled creatives and receive a polling URL.
-curl -X POST http://127.0.0.1:8000/api/v1/demo/tasks
+curl -X POST http://127.0.0.1:8001/api/v1/demo/tasks
 ```
 
 The response is returned immediately while processing continues:
@@ -106,7 +115,7 @@ Poll the `status_url` from the response until the status becomes `completed` or
 
 ```shell
 # Replace <task_id> with the task ID returned by the POST response.
-curl http://127.0.0.1:8000/api/v1/demo/tasks/<task_id>
+curl http://127.0.0.1:8001/api/v1/demo/tasks/<task_id>
 ```
 
 A completed task returns one result per image. `attempts` is the number of
@@ -151,7 +160,7 @@ Download an image only after its task is complete:
 ```shell
 # Replace <task_id> and <image_id> with values from a completed task result.
 curl --output variant.png \
-  http://127.0.0.1:8000/api/v1/demo/tasks/<task_id>/variants/<image_id>
+  http://127.0.0.1:8001/api/v1/demo/tasks/<task_id>/variants/<image_id>
 ```
 
 ### Submit your own creatives
@@ -208,7 +217,7 @@ Submit the committed two-image example through the product endpoint:
 
 ```shell
 # Submit both creatives and the JSON documents that reference their filenames.
-curl -X POST http://127.0.0.1:8000/api/v1/tasks \
+curl -X POST http://127.0.0.1:8001/api/v1/tasks \
   -F "images=@examples/demo/creative_1.png;type=image/png" \
   -F "images=@examples/demo/creative_2.png;type=image/png" \
   -F "recommendations=@examples/demo/recommendations.json;type=application/json" \

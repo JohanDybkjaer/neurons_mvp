@@ -111,6 +111,15 @@ def test_health_swagger_and_openapi_expose_contract(tmp_path):
     assert evaluation_schema["examples"][0]["overall_pass"] is True
 
 
+def test_application_creates_runtime_log_file(tmp_path):
+    config = make_test_config(tmp_path)
+
+    with TestClient(create_app(config=config)):
+        pass
+
+    assert (tmp_path.parent / "logs" / "app.log").is_file()
+
+
 def test_ten_image_task_completes_with_retrievable_variants(
     tmp_path, png_bytes, recommendations, brand_guidelines
 ):

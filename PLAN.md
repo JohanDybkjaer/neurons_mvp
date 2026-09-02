@@ -152,8 +152,9 @@ Make the small service easy to run, inspect, and discuss in the interview.
 - Add one minimal CI workflow that performs a frozen dependency install and
   runs Ruff, mypy, and the default pytest suite.
 - Include the supplied creatives and JSON files unchanged as demo inputs.
-- Add standard-library logging for task ID, image ID, step, attempt, duration,
-  and outcome without logging sensitive payloads.
+- Add standard-library logging to stdout and a server-managed runtime log file
+  for task ID, image ID, step, attempt, duration, and outcome without logging
+  sensitive payloads.
 - Write a concise README covering:
   - Local setup with `uv`.
   - Docker build and run commands.

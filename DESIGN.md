@@ -409,8 +409,10 @@ service does not add retries, exception taxonomies, or partial-success rules.
 
 ## Logging
 
-Use Python's standard `logging` module and write to stdout. Log only safe,
-operational metadata:
+Use Python's standard `logging` module and write to stdout plus a
+server-managed `logs/app.log` file beside the configured artifact-root
+directory (for example, `runtime/logs/app.log`). Log only safe, operational
+metadata:
 
 - Task ID and image identifier (`all` for task-wide events).
 - Workflow step, attempt number, and task image count where relevant.

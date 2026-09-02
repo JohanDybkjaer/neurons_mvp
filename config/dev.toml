@@ -10,9 +10,9 @@ timeout_seconds = 120
 max_image_size_mb = 10
 max_iterations = 2
 
-# Application log verbosity; logs are written to stdout.
+# Application log verbosity; logs are written to stdout and runtime/logs/app.log.
 [logging]
-level = "INFO"
+level = "DEBUG"
 
 # Server-managed originals and generated variants, relative to the working directory.
 [storage]
