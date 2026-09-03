@@ -16,9 +16,7 @@ from app.schema_models import CodedErrorResponse
 
 LOGGER = logging.getLogger(__name__)
 FILENAME_SET_MISMATCH_CODE = "image_json_filename_set_mismatch"
-UPLOAD_FIELD_NAMES = frozenset(
-    {"images", "recommendations", "brand_guidelines"}
-)
+UPLOAD_FIELD_NAMES = frozenset({"images", "recommendations", "brand_guidelines"})
 VALIDATION_REJECTION_REASONS = {
     "Invalid recommendations JSON.": "invalid_recommendations_json",
     "Invalid brand guidelines JSON.": "invalid_brand_guidelines_json",
@@ -71,10 +69,12 @@ def _validation_rejection_reason(error: HTTPException) -> str:
 
 async def handle_request_validation_error(
     request: Request,
-    error: RequestValidationError,
+    error: Exception,
 ) -> Response:
     """Log safe metadata for validation that happens before an endpoint runs."""
 
+    if not isinstance(error, RequestValidationError):
+        raise error
     error_types, field_names = _validation_summary(error)
     LOGGER.info(
         (
@@ -90,9 +90,11 @@ async def handle_request_validation_error(
     return await default_request_validation_exception_handler(request, error)
 
 
-async def handle_http_exception(request: Request, error: HTTPException) -> Response:
+async def handle_http_exception(request: Request, error: Exception) -> Response:
     """Log safe metadata for application-raised validation rejections."""
 
+    if not isinstance(error, HTTPException):
+        raise error
     if error.status_code == 422:
         reason = _validation_rejection_reason(error)
         LOGGER.info(
@@ -104,10 +106,7 @@ async def handle_http_exception(request: Request, error: HTTPException) -> Respo
             request.method,
             reason,
         )
-        if (
-            reason == FILENAME_SET_MISMATCH_CODE
-            and isinstance(error.detail, str)
-        ):
+        if reason == FILENAME_SET_MISMATCH_CODE and isinstance(error.detail, str):
             response = CodedErrorResponse(detail=error.detail, code=reason)
             return JSONResponse(
                 status_code=error.status_code,

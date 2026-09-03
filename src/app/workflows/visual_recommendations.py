@@ -16,10 +16,10 @@ from typing import TypeVar
 
 from app.ai_services import OpenAIService
 from app.schema_models import (
+    MAX_ITERATIONS,
     BrandGuidelines,
     Evaluation,
     ImageResult,
-    MAX_ITERATIONS,
     Recommendation,
     TaskState,
     TaskStatus,
@@ -54,10 +54,7 @@ async def _run_step(
 
     started_at = time.perf_counter()
     LOGGER.info(
-        (
-            "task_id=%s image_id=%s step=%s attempt=%d "
-            "outcome=started duration_ms=0.0"
-        ),
+        ("task_id=%s image_id=%s step=%s attempt=%d outcome=started duration_ms=0.0"),
         task_id,
         image_id,
         step,
@@ -81,10 +78,7 @@ async def _run_step(
         raise
 
     LOGGER.info(
-        (
-            "task_id=%s image_id=%s step=%s attempt=%d "
-            "outcome=success duration_ms=%.1f"
-        ),
+        ("task_id=%s image_id=%s step=%s attempt=%d outcome=success duration_ms=%.1f"),
         task_id,
         image_id,
         step,
@@ -97,7 +91,9 @@ async def _run_step(
 def _validate_evaluation(evaluation: Evaluation, item: ImageWorkItem) -> None:
     """Reject evaluator checks that do not exactly cover the original request."""
 
-    expected_recommendations = [recommendation.id for recommendation in item.recommendations]
+    expected_recommendations = [
+        recommendation.id for recommendation in item.recommendations
+    ]
     returned_recommendations = [check.id for check in evaluation.recommendations]
     expected_criteria = item.brand_guidelines.criteria()
     returned_criteria = [check.criterion for check in evaluation.brand_checks]

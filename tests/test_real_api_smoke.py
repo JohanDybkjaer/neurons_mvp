@@ -5,8 +5,8 @@ import pytest
 from openai import AsyncOpenAI
 from PIL import Image, ImageDraw
 
-from app.config import load_config
 from app.ai_services import OpenAIService
+from app.config import load_config
 from app.schema_models import BrandGuidelines, Recommendation
 
 
@@ -28,8 +28,7 @@ RUN_REAL_API = real_api_enabled()
 @pytest.mark.skipif(
     not RUN_REAL_API,
     reason=(
-        "Set RUN_OPENAI_SMOKE_TEST=1, OPENAI_API_KEY, and APP_CONFIG_FILE "
-        "to enable."
+        "Set RUN_OPENAI_SMOKE_TEST=1, OPENAI_API_KEY, and APP_CONFIG_FILE to enable."
     ),
 )
 def test_real_api_single_creative_smoke(tmp_path):

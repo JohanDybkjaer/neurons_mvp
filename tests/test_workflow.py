@@ -3,10 +3,10 @@ import logging
 import shutil
 
 import pytest
+from conftest import make_evaluation, write_original
 
 from app.schema_models import TaskState, TaskStatus
 from app.workflows import ImageWorkItem, run_task
-from conftest import make_evaluation, write_original
 
 
 @pytest.fixture
@@ -134,9 +134,7 @@ class RepairService:
         brand_guidelines,
     ):
         self.evaluation_calls += 1
-        return make_evaluation(
-            recommendations, brand_guidelines, self.outcomes.pop(0)
-        )
+        return make_evaluation(recommendations, brand_guidelines, self.outcomes.pop(0))
 
 
 def test_failed_first_evaluation_causes_one_repair_from_original(
@@ -368,17 +366,14 @@ def test_unvalidated_evaluator_output_cannot_control_workflow(
     assert task.results == []
     messages = [record.getMessage() for record in workflow_log_records]
     assert any(
-        "step=generation attempt=1 outcome=success" in message
+        "step=generation attempt=1 outcome=success" in message for message in messages
+    )
+    assert any(
+        "step=evaluation attempt=1 outcome=failed error_type=ValidationError" in message
         for message in messages
     )
     assert any(
-        "step=evaluation attempt=1 outcome=failed error_type=ValidationError"
-        in message
-        for message in messages
-    )
-    assert any(
-        "step=pipeline attempt=1 outcome=failed error_type=ValidationError"
-        in message
+        "step=pipeline attempt=1 outcome=failed error_type=ValidationError" in message
         for message in messages
     )
     assert any(

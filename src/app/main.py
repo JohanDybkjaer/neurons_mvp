@@ -15,11 +15,13 @@ from openai import AsyncOpenAI
 
 from app.ai_services import OpenAIService
 from app.api import health_router
-from app.api.error_handlers import handle_http_exception, handle_request_validation_error
+from app.api.error_handlers import (
+    handle_http_exception,
+    handle_request_validation_error,
+)
 from app.api.v1 import router as v1_router
 from app.api.v1.demo import router as demo_router
 from app.config import AppConfig, load_config
-from app.schema_models import TaskState
 
 LOGGER = logging.getLogger(__name__)
 
@@ -139,8 +141,8 @@ def create_app(
     )
     # Task state and artifact indexes intentionally share this process lifetime;
     # running more than one worker would create independent, inconsistent views.
-    application.state.tasks: dict[str, TaskState] = {}
-    application.state.variant_paths: dict[str, dict[str, Path]] = {}
+    application.state.tasks = {}
+    application.state.variant_paths = {}
     application.state.service = service
     application.state.config = config
     application.include_router(health_router)

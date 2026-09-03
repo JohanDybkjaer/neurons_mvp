@@ -3,11 +3,11 @@
 import asyncio
 import shutil
 
+from conftest import TEST_API_KEY, make_evaluation, upload_payload
 from fastapi.testclient import TestClient
 
 from app.config import AppConfig
 from app.main import create_app
-from conftest import TEST_API_KEY, make_evaluation, upload_payload
 
 DEMO_TASKS_PATH = "/api/v1/demo/tasks"
 

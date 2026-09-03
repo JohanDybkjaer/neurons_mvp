@@ -117,10 +117,7 @@ def _log_provider_error(operation: str, error: APIStatusError) -> None:
     """Log safe provider diagnostics without recording response content."""
 
     LOGGER.warning(
-        (
-            "provider_operation=%s status_code=%d provider_code=%s "
-            "request_id=%s"
-        ),
+        ("provider_operation=%s status_code=%d provider_code=%s request_id=%s"),
         operation,
         error.status_code,
         error.code or "none",
@@ -179,9 +176,7 @@ class OpenAIService:
 
         original_bytes = await asyncio.to_thread(original_path.read_bytes)
         output_format: Literal["jpeg", "png"] = (
-            "jpeg"
-            if destination_path.suffix.lower() in {".jpg", ".jpeg"}
-            else "png"
+            "jpeg" if destination_path.suffix.lower() in {".jpg", ".jpeg"} else "png"
         )
         try:
             response = await self._client.images.edit(

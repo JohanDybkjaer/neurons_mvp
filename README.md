@@ -88,6 +88,30 @@ Open [Swagger UI](http://127.0.0.1:8001/docs) to submit and inspect requests
 interactively. The route descriptions, field descriptions, response examples,
 and response schemas are generated from FastAPI and Pydantic metadata.
 
+## Docker
+
+Build the service from the committed lockfile:
+
+```shell
+docker build --tag visual-recommendations-mvp .
+```
+
+Run it with the secret-only `.env` file and one complete non-secret
+configuration document. The container uses the development document committed
+at `config/dev.toml` and exposes Swagger UI on port 8000:
+
+```shell
+docker run --rm --publish 8000:8000 \
+  --env-file .env \
+  --env APP_CONFIG_FILE=config/dev.toml \
+  visual-recommendations-mvp
+```
+
+Then visit [Swagger UI](http://127.0.0.1:8000/docs) or check
+`http://127.0.0.1:8000/health`. The image runs as a non-root user with one
+Uvicorn worker. Its process-local task state is intentionally not retained if
+the container stops.
+
 ## Run a task
 
 ### Try the bundled demo
@@ -271,7 +295,10 @@ reserved for technical execution errors.
 Run the default credential-free suite:
 
 ```shell
-# Run deterministic tests with the fake AI service.
+# Verify formatting, linting, types, and deterministic tests.
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy
 uv run pytest
 ```
 

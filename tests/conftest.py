@@ -95,12 +95,24 @@ def upload_payload(
     image_files = [
         ("images", (filename, png_bytes, "image/png")) for filename in filenames
     ]
-    return image_files, (
-        "recommendations",
-        ("recommendations.json", json.dumps(recommendation_document), "application/json"),
-    ), (
-        "brand_guidelines",
-        ("brand_guidelines.json", json.dumps(guideline_document), "application/json"),
+    return (
+        image_files,
+        (
+            "recommendations",
+            (
+                "recommendations.json",
+                json.dumps(recommendation_document),
+                "application/json",
+            ),
+        ),
+        (
+            "brand_guidelines",
+            (
+                "brand_guidelines.json",
+                json.dumps(guideline_document),
+                "application/json",
+            ),
+        ),
     )
 
 

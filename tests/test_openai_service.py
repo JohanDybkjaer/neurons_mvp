@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from conftest import make_evaluation, write_original
 from openai import BadRequestError
 from pydantic import ValidationError
 
 from app.ai_services import OpenAIService
-from conftest import make_evaluation, write_original
 
 
 def make_client(image_response=None, evaluation_response=None):
@@ -50,9 +50,7 @@ def test_generate_variant_calls_image_edit_and_writes_result(
     assert "input_fidelity" not in call
     assert "Brand guidelines (authoritative)" in call["prompt"]
     assert all(item.id in call["prompt"] for item in recommendations)
-    assert all(
-        criterion in call["prompt"] for criterion in brand_guidelines.criteria()
-    )
+    assert all(criterion in call["prompt"] for criterion in brand_guidelines.criteria())
 
 
 def test_generate_variant_repair_prompt_uses_only_validated_failed_checks(
@@ -93,9 +91,7 @@ def test_evaluate_variant_sends_both_images_and_all_criteria_once(
     write_original(original_path, png_bytes)
     write_original(variant_path, png_bytes)
     evaluation = make_evaluation(recommendations, brand_guidelines, True)
-    client = make_client(
-        evaluation_response=SimpleNamespace(output_parsed=evaluation)
-    )
+    client = make_client(evaluation_response=SimpleNamespace(output_parsed=evaluation))
     service = OpenAIService(client, "image-model", "evaluation-model")
 
     result = asyncio.run(
@@ -116,12 +112,9 @@ def test_evaluate_variant_sends_both_images_and_all_criteria_once(
     image_parts = [part for part in content if part["type"] == "input_image"]
     assert len(image_parts) == 2
     assert all(
-        part["image_url"].startswith("data:image/png;base64,")
-        for part in image_parts
+        part["image_url"].startswith("data:image/png;base64,") for part in image_parts
     )
-    prompt = "\n".join(
-        part["text"] for part in content if part["type"] == "input_text"
-    )
+    prompt = "\n".join(part["text"] for part in content if part["type"] == "input_text")
     assert all(item.id in prompt for item in recommendations)
     assert all(criterion in prompt for criterion in brand_guidelines.criteria())
 
