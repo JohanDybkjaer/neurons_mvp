@@ -57,10 +57,10 @@ Start the development configuration:
 make dev
 ```
 
-The launcher defaults to port 8001. To use another local port:
+The launcher defaults to port 8000. To use another local port:
 
 ```shell
-make dev PORT=8002
+make dev PORT=8001
 ```
 
 Application logs continue to appear in the terminal and are also written to
@@ -73,7 +73,7 @@ Check that the process is running:
 
 ```shell
 # The health endpoint never calls the provider.
-curl http://127.0.0.1:8001/health
+curl http://127.0.0.1:8000/health
 ```
 
 Expected response:
@@ -84,7 +84,7 @@ Expected response:
 }
 ```
 
-Open [Swagger UI](http://127.0.0.1:8001/docs) to submit and inspect requests
+Open [Swagger UI](http://127.0.0.1:8000/docs) to submit and inspect requests
 interactively. The route descriptions, field descriptions, response examples,
 and response schemas are generated from FastAPI and Pydantic metadata.
 
@@ -93,7 +93,7 @@ and response schemas are generated from FastAPI and Pydantic metadata.
 Build the service from the committed lockfile:
 
 ```shell
-docker build --tag visual-recommendations-mvp .
+make docker-build
 ```
 
 Run it with the secret-only `.env` file and one complete non-secret
@@ -101,16 +101,21 @@ configuration document. The container uses the development document committed
 at `config/dev.toml` and exposes Swagger UI on port 8000:
 
 ```shell
-docker run --rm --publish 8000:8000 \
-  --env-file .env \
-  --env APP_CONFIG_FILE=config/dev.toml \
-  visual-recommendations-mvp
+make docker-run
 ```
 
 Then visit [Swagger UI](http://127.0.0.1:8000/docs) or check
 `http://127.0.0.1:8000/health`. The image runs as a non-root user with one
 Uvicorn worker. Its process-local task state is intentionally not retained if
 the container stops.
+
+By default, the Make targets use image name `visual-recommendations-mvp`, host
+port `8000`, and `config/dev.toml`. Override them when needed, for example:
+
+```shell
+make docker-build DOCKER_IMAGE=visual-recommendations-demo
+make docker-run DOCKER_PORT=8002 DOCKER_CONFIG=config/test.toml
+```
 
 ## Run a task
 
@@ -124,7 +129,7 @@ Submit the bundled demo only when you are ready for paid calls:
 
 ```shell
 # Submit the two bundled creatives and receive a polling URL.
-curl -X POST http://127.0.0.1:8001/api/v1/demo/tasks
+curl -X POST http://127.0.0.1:8000/api/v1/demo/tasks
 ```
 
 The response is returned immediately while processing continues:
@@ -142,7 +147,7 @@ Poll the `status_url` from the response until the status becomes `completed` or
 
 ```shell
 # Replace <task_id> with the task ID returned by the POST response.
-curl http://127.0.0.1:8001/api/v1/demo/tasks/<task_id>
+curl http://127.0.0.1:8000/api/v1/demo/tasks/<task_id>
 ```
 
 A completed task returns one result per image. `attempts` is the number of
@@ -187,7 +192,7 @@ Download an image only after its task is complete:
 ```shell
 # Replace <task_id> and <image_id> with values from a completed task result.
 curl --output variant.png \
-  http://127.0.0.1:8001/api/v1/demo/tasks/<task_id>/variants/<image_id>
+  http://127.0.0.1:8000/api/v1/demo/tasks/<task_id>/variants/<image_id>
 ```
 
 ### Submit your own creatives
@@ -244,7 +249,7 @@ Submit the committed two-image example through the product endpoint:
 
 ```shell
 # Submit both creatives and the JSON documents that reference their filenames.
-curl -X POST http://127.0.0.1:8001/api/v1/tasks \
+curl -X POST http://127.0.0.1:8000/api/v1/tasks \
   -F "images=@examples/demo/creative_1.png;type=image/png" \
   -F "images=@examples/demo/creative_2.png;type=image/png" \
   -F "recommendations=@examples/demo/recommendations.json;type=application/json" \
