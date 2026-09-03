@@ -3,25 +3,41 @@
 Async FastAPI service for generating and evaluating improved marketing creatives
 from structured recommendations and brand guidelines.
 
-## Review in two minutes
+## Quick overview
 
 - **Try it:** Start the service, open Swagger UI, and submit the supplied sample
   files to `POST /api/v1/tasks`.
 - **Workflow:** Generate from the original → evaluate all checks → repair only
   when required → return the final variant.
-- **Engineering:** Async task API, bounded concurrency, validated boundaries,
-  deterministic tests, Docker, and CI.
-- **Scope:** A deliberately small technical-interview case, not a claim of
-  horizontally scalable production infrastructure.
+- **Implementation:** An async task API, deterministic tests, Docker, and CI.
+- **Scope:** A small MVP  , not a full production platform.
 
-## Run with sample inputs
+## Start the service
+
+Choose one path.
+
+### 1. Docker
+
+Use this path to run the same container that CI builds.
 
 ```shell
-uv sync
-cp .env.example .env
-# Set OPENAI_API_KEY in .env.
+make docker-build
+make docker-run
+```
+
+### 2. Local development with uv
+
+Use this path when changing or debugging the application.
+
+```shell
 make dev
 ```
+
+On the first `make docker-run` or `make dev`, Make creates the ignored `.env`
+file and tells you to set `OPENAI_API_KEY`. Set it once, then repeat the same
+command. Docker users do not need to install `uv`; it is inside the image.
+
+## Submit the supplied sample inputs
 
 - Open [Swagger UI](http://127.0.0.1:8000/docs).
 - Submit `POST /api/v1/tasks` with both creatives, `recommendations.json`, and
@@ -42,7 +58,7 @@ make dev
 Task submission returns `202 Accepted`; the client polls until the task is
 `completed` or `failed`.
 
-## Key properties
+## Behavior worth knowing
 
 - PNG and JPEG inputs only; JSON filenames must exactly match uploaded files.
 - One evaluator request checks every recommendation and brand criterion for a
@@ -74,19 +90,14 @@ uv run pytest
 - Default tests are deterministic and never call OpenAI.
 - The real-provider smoke test requires `RUN_OPENAI_SMOKE_TEST=1` and a key.
 
-## Docker
+## Container checks
 
-```shell
-make docker-build
-make docker-run
-```
-
-- Installs from `uv.lock`.
-- Runs as a non-root user with one Uvicorn worker.
+- The Docker image installs from `uv.lock`, runs as a non-root user, and starts
+  one Uvicorn worker.
 - CI runs Python checks, then builds the image and probes its user, `/health`,
   and `/docs`.
 
-## Deliberate MVP boundaries
+## What this does not try to solve
 
 - Process-local task state and local artifacts; a restart cannot resume tasks.
 - No authentication, tenant isolation, durable queue, database, or object
@@ -95,4 +106,4 @@ make docker-run
   compliance.
 - No automatic provider retries or partial-success task responses.
 
-For the design rationale and workflow diagram, see [DESIGN.md](DESIGN.md).
+For the workflow diagram and trade-offs, see [DESIGN.md](DESIGN.md).

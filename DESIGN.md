@@ -1,13 +1,14 @@
 # Design
 
-## Goal
+## What this service does
 
-- Containerised asynchronous backend for visual recommendations.
-- Generate one edited variant per creative from recommendations and brand rules.
-- Return a structured visual evaluation through a polling API.
-- Use Swagger UI as the interactive submission interface; no custom frontend.
+- Accepts marketing creatives, recommendations, and brand guidelines.
+- Generates one edited variant for each creative.
+- Evaluates every requested change and brand rule.
+- Returns immediately with a task URL; callers poll for the final variants and
+  evaluations.
 
-## Workflow
+## Flow
 
 ```mermaid
 flowchart TD
@@ -21,26 +22,44 @@ flowchart TD
     F --> G
 ```
 
-## Boundaries and trust
+## Choices I made
 
-- **FastAPI:** multipart parsing, safe errors, task polling, and artifact delivery.
-- **Workflow:** timeouts, concurrency, iteration bounds, and task outcomes.
-- **OpenAI adapter:** prompts, provider payloads, and provider-response decoding.
-- **Pydantic:** uploads, configuration, and evaluator-output validation.
+- **Two focused model calls:** one edits; one evaluates. This makes failures
+  easier to inspect than a single prompt that both edits and judges itself.
+- **No agent framework:** the workflow is a short, explicit feedback loop. A
+  planner or tool-calling loop would not improve this assignment.
+- **Repair from the original:** each repair receives the latest failed checks,
+  but starts with the original creative to avoid accumulated visual changes.
+- **One evaluator request per variant:** it compares both images and checks all
+  recommendations and brand criteria together, which keeps cost and judgments
+  consistent.
+- **Small concurrency limit:** two image pipelines may run at once; each one is
+  sequential internally because generation and evaluation depend on each other.
+- **Structured results:** evaluator output must match the requested IDs and
+  criteria. The application calculates `overall_pass` from those individual
+  checks instead of trusting a model summary.
 
-Safety rules:
+## Guardrails
 
-- Treat inputs, filenames, configuration, and provider output as untrusted.
-- Decode uploaded and generated images before use.
-- Use UUID task directories and server-generated image IDs for filesystem access.
-- Do not expose or log secrets, image bytes, full prompts, or provider payloads.
-- Require evaluator coverage to match the original recommendations and criteria.
+- The API validates image format, upload size, JSON shape, and filename matches.
+- Generated images are decoded before being saved or served.
+- Task and image IDs are server-generated; uploaded filenames never become
+  filesystem paths.
+- Configuration is validated once at startup. Secrets are separate from normal
+  TOML settings.
+- The default tests use a deterministic fake service; they are fast,
+  credential-free, and do not use the network.
+- Errors and logs exclude secrets, image bytes, full prompts, and provider
+  payloads.
 
-## Scope boundaries
+## What I would add when it is needed
 
-Not included: durable jobs, restart recovery, horizontal scaling, authentication,
-multi-tenancy, database/object storage, distributed queues, automatic retries,
-or a custom frontend.
+- Durable task state and object storage for restart recovery.
+- Authentication and tenant isolation before exposing the service publicly.
+- A queue and multiple workers when one process is no longer enough.
+- Offline evaluation datasets, agreement metrics, and human review for
+  brand-sensitive decisions.
 
-Those additions should follow real product, scale, data-governance, and
-reliability requirements—not be speculative complexity in this MVP.
+Those are intentionally absent here. This case is meant to show the core
+workflow and the decisions needed to evolve it, rather than imitate a complete
+production platform.
