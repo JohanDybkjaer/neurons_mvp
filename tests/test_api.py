@@ -15,6 +15,7 @@ from app.main import create_app
 from app.schema_models import TaskState, TaskStatus
 
 TASKS_PATH = "/api/v1/tasks"
+SAMPLE_INPUT_DIRECTORY = Path("examples/demo")
 
 
 def make_test_config(tmp_path, **overrides):
@@ -72,6 +73,60 @@ class RecordingService:
         return make_evaluation(recommendations, brand_guidelines, passes)
 
 
+def test_supplied_sample_inputs_complete_through_product_endpoint(tmp_path):
+    """Keep the supplied assignment files usable through the public task API."""
+
+    service = RecordingService()
+    files = [
+        (
+            "images",
+            (
+                filename,
+                (SAMPLE_INPUT_DIRECTORY / filename).read_bytes(),
+                "image/png",
+            ),
+        )
+        for filename in ("creative_1.png", "creative_2.png")
+    ]
+    files.extend(
+        [
+            (
+                "recommendations",
+                (
+                    "recommendations.json",
+                    (SAMPLE_INPUT_DIRECTORY / "recommendations.json").read_bytes(),
+                    "application/json",
+                ),
+            ),
+            (
+                "brand_guidelines",
+                (
+                    "brand_guidelines.json",
+                    (SAMPLE_INPUT_DIRECTORY / "brand_guidelines.json").read_bytes(),
+                    "application/json",
+                ),
+            ),
+        ]
+    )
+
+    with TestClient(
+        create_app(service=service, config=make_test_config(tmp_path))
+    ) as client:
+        response = client.post(TASKS_PATH, files=files)
+
+        assert response.status_code == 202
+        task = client.get(response.json()["status_url"]).json()
+        assert task["status"] == TaskStatus.completed
+        assert [result["source_filename"] for result in task["results"]] == [
+            "creative_1.png",
+            "creative_2.png",
+        ]
+        assert all(
+            client.get(result["variant_url"]).status_code == 200
+            for result in task["results"]
+        )
+
+
 def test_health_swagger_and_openapi_expose_contract(tmp_path):
     client = TestClient(create_app(config=make_test_config(tmp_path)))
 
@@ -86,6 +141,7 @@ def test_health_swagger_and_openapi_expose_contract(tmp_path):
         f"{TASKS_PATH}/{{task_id}}/variants/{{image_id}}",
         "/health",
     } <= set(schema["paths"])
+    assert "/api/v1/demo/tasks" not in schema["paths"]
     request_content = schema["paths"][TASKS_PATH]["post"]["requestBody"]["content"]
     assert "multipart/form-data" in request_content
     body_reference = request_content["multipart/form-data"]["schema"]["$ref"]

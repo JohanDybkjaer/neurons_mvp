@@ -20,7 +20,6 @@ from app.api.error_handlers import (
     handle_request_validation_error,
 )
 from app.api.v1 import router as v1_router
-from app.api.v1.demo import router as demo_router
 from app.config import AppConfig, load_config
 
 LOGGER = logging.getLogger(__name__)
@@ -147,7 +146,6 @@ def create_app(
     application.state.config = config
     application.include_router(health_router)
     application.include_router(v1_router)
-    application.include_router(demo_router)
     application.add_exception_handler(
         RequestValidationError, handle_request_validation_error
     )
