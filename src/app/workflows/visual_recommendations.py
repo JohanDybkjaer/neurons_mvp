@@ -88,8 +88,13 @@ async def _run_step(
     return result
 
 
-def _validate_evaluation(evaluation: Evaluation, item: ImageWorkItem) -> None:
-    """Reject evaluator checks that do not exactly cover the original request."""
+def _validate_evaluation(evaluation: Evaluation, item: ImageWorkItem) -> Evaluation:
+    """Validate evaluator coverage and derive its aggregate pass decision.
+
+    The evaluator's per-check boolean decisions are schema-validated model
+    output. The workflow derives ``overall_pass`` from those decisions instead
+    of trusting a separately supplied aggregate flag to control repairs.
+    """
 
     expected_recommendations = [
         recommendation.id for recommendation in item.recommendations
@@ -103,6 +108,12 @@ def _validate_evaluation(evaluation: Evaluation, item: ImageWorkItem) -> None:
         raise ValueError("Evaluation recommendation checks do not match the request")
     if Counter(returned_criteria) != Counter(expected_criteria):
         raise ValueError("Evaluation brand checks do not match the request")
+    return evaluation.model_copy(
+        update={
+            "overall_pass": all(check.applied for check in evaluation.recommendations)
+            and all(check.compliant for check in evaluation.brand_checks)
+        }
+    )
 
 
 async def _request_evaluation(
@@ -118,8 +129,7 @@ async def _request_evaluation(
         item.brand_guidelines,
     )
     evaluation = Evaluation.model_validate(response)
-    _validate_evaluation(evaluation, item)
-    return evaluation
+    return _validate_evaluation(evaluation, item)
 
 
 async def _process_image(

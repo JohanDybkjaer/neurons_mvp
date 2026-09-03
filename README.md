@@ -284,6 +284,10 @@ When an evaluation fails and an iteration remains, the next generation uses the
 original creative and only the latest failed checks as feedback. It does not
 edit a previous generated variant, which avoids cumulative drift.
 
+The service derives `overall_pass` from the individual recommendation and brand
+checks after validating their schema and coverage. The evaluator's aggregate
+field is never trusted by itself to skip a required repair.
+
 | Fixed workflow limit | Value |
 | --- | --- |
 | Images per request | 1–10 |

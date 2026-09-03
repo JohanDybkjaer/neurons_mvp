@@ -21,7 +21,7 @@ abstractions, or unnecessary infrastructure.
 
 - [x] Step 1 - `mvp/api-and-workflow`
 - [x] Step 2 - `mvp/openai-integration`
-- [ ] Step 3 - `mvp/container-and-demo`
+- [ ] Step 3 - `mvp/containerize`
 
 ## Step 1 - `mvp/api-and-workflow`
 

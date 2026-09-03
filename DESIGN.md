@@ -297,7 +297,10 @@ Evaluation
 
 The evaluator must return one `RecommendationCheck` for every supplied
 recommendation and one `BrandCheck` for every explicit brand criterion.
-Application control flow never depends on unvalidated model prose.
+Application control flow never depends on unvalidated model prose. After schema
+and coverage validation, the workflow derives `overall_pass` from the individual
+recommendation and brand-check booleans. A model-supplied aggregate flag cannot
+bypass a required repair or cause an unnecessary one.
 
 ## OpenAI integration
 

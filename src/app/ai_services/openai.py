@@ -7,12 +7,14 @@ this module so the workflow remains independent of the OpenAI SDK.
 import asyncio
 import base64
 import binascii
+import io
 import json
 import logging
 from pathlib import Path
 from typing import Literal
 
 from openai import APIStatusError, AsyncOpenAI
+from PIL import Image, UnidentifiedImageError
 
 from app.schema_models import BrandGuidelines, Evaluation, Recommendation
 
@@ -113,6 +115,18 @@ def _data_url(image_bytes: bytes, path: Path) -> str:
     return f"data:{_media_type(path)};base64,{encoded}"
 
 
+def _validate_generated_image(image_bytes: bytes, expected_format: str) -> None:
+    """Reject provider bytes that are not the requested decoded image format."""
+
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            if image.format != expected_format:
+                raise ValueError("Unexpected image format")
+            image.load()
+    except (UnidentifiedImageError, OSError, ValueError) as error:
+        raise ValueError("Image provider returned invalid image data") from error
+
+
 def _log_provider_error(operation: str, error: APIStatusError) -> None:
     """Log safe provider diagnostics without recording response content."""
 
@@ -202,6 +216,12 @@ class OpenAIService:
             )
         except (binascii.Error, ValueError) as error:
             raise ValueError("Image provider returned invalid image data") from error
+        expected_image_format = "JPEG" if output_format == "jpeg" else "PNG"
+        await asyncio.to_thread(
+            _validate_generated_image,
+            image_bytes,
+            expected_image_format,
+        )
         await asyncio.to_thread(destination_path.write_bytes, image_bytes)
 
     async def evaluate_variant(
