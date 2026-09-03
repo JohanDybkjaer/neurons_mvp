@@ -5,13 +5,15 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from app.models import (
+from app.schema_models import (
     BrandCheck,
     BrandGuidelines,
     Evaluation,
     Recommendation,
     RecommendationCheck,
 )
+
+TEST_API_KEY = "test-api-key"
 
 
 @pytest.fixture

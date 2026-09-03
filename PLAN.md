@@ -20,7 +20,7 @@ abstractions, or unnecessary infrastructure.
 ## Progress
 
 - [x] Step 1 - `mvp/api-and-workflow`
-- [ ] Step 2 - `mvp/openai-integration`
+- [x] Step 2 - `mvp/openai-integration`
 - [ ] Step 3 - `mvp/container-and-demo`
 
 ## Step 1 - `mvp/api-and-workflow`
@@ -93,9 +93,9 @@ preserving the already-tested workflow.
   - Edit an original creative from its recommendations and brand guidelines.
   - Evaluate the original and variant using a schema-constrained vision
     response.
-- Extend the configuration package to load and validate only `OPENAI_API_KEY`,
-  `IMAGE_MODEL`, and `EVALUATION_MODEL`; keep environment reads out of route,
-  workflow, and provider methods.
+- Extend the configuration package to load and validate `OPENAI_API_KEY` as a
+  secret and one explicitly selected, complete non-secret TOML document; keep
+  configuration reads out of route, workflow, and provider methods.
 - Construct one asynchronous OpenAI client for the application and close it via
   the FastAPI lifespan.
 - Build a direct editing prompt without adding a planning stage.
@@ -132,26 +132,45 @@ Make the small service easy to run, inspect, and discuss in the interview.
 
 ### Deliverables
 
+- Extend task submission and demo overrides to accept one through ten images,
+  while retaining a two-pipeline concurrency bound per task.
+- Add the required `limits.max_iterations` TOML setting, validate it as an
+  integer from 1 through 5, and pass it explicitly into the shared workflow.
+- Replace the single-repair branch with a bounded iteration loop. Every
+  iteration generates from the original creative, evaluates all criteria, and
+  stops when it passes or reaches the configured limit. Enforce five as a hard
+  code ceiling for direct workflow callers as well.
+- Update deterministic tests for ten-image requests, two-pipeline concurrency,
+  configurable iteration limits, early success, and invalid limits.
 - Add a Dockerfile based on a small pinned Python image that installs from
   `uv.lock`, runs as a non-root user, and starts one Uvicorn worker.
-- Add `.dockerignore`, `.gitignore`, and `.env.example` entries needed by the
-  MVP.
+- Add `.dockerignore`, `.gitignore`, committed `config/dev.toml` and
+  `config/test.toml` files for non-secret settings, and a secret-only
+  `.env.example`, including a configurable standard-library logging level.
 - Configure Ruff formatting/linting and mypy for application code in
   `pyproject.toml`; keep the rule set small and document any necessary exclusion.
 - Add one minimal CI workflow that performs a frozen dependency install and
   runs Ruff, mypy, and the default pytest suite.
 - Include the supplied creatives and JSON files unchanged as demo inputs.
-- Add standard-library logging for task ID, image ID, step, attempt, duration,
-  and outcome without logging sensitive payloads.
+- Add standard-library logging to stdout and a server-managed runtime log file
+  for task ID, image ID, step, attempt, duration, and outcome without logging
+  sensitive payloads.
+- Clear runtime logs when the API starts while retaining task artifacts for
+  manual inspection; each process still begins with fresh process-local state.
+- Store each task's validated recommendations and brand-guidelines JSON files
+  beside its server-owned input images.
+- Log safe request-validation rejection metadata without recording uploaded
+  multipart content or invalid field values.
 - Write a concise README covering:
   - Local setup with `uv`.
   - Docker build and run commands.
-  - Required environment variables.
+  - The required secret and non-secret configuration.
   - The Swagger UI demonstration flow.
   - The asynchronous submit-and-poll behavior.
   - Accepted limitations from `DESIGN.md`.
 - Run the full automated test suite.
-- Manually verify the supplied two-image request through Swagger UI.
+- Manually verify a ten-image request through Swagger UI after permission for a
+  visual inspection is obtained.
 - If credentials and budget are available, run the opt-in smoke test once and
   record only the outcome, not generated assets or secrets.
 
@@ -160,6 +179,7 @@ Make the small service easy to run, inspect, and discuss in the interview.
 - The image builds and starts successfully with one worker.
 - `/health` and `/docs` are reachable in the container.
 - The supplied files can be selected directly in Swagger UI.
+- Up to ten images can be selected for product or demo task submission.
 - A submitted task returns immediately and can be polled to a terminal state.
 - Successful variants can be downloaded from their returned URLs.
 - Ruff formatting and linting, mypy, and the default pytest suite pass locally

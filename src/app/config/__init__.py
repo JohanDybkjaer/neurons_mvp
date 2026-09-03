@@ -1,5 +1,6 @@
 """Public configuration interface."""
 
-from app.config.settings import AppConfig, DEFAULT_CONFIG
+from app.config.load_config import load_config
+from app.config.validate_config import AppConfig
 
-__all__ = ["AppConfig", "DEFAULT_CONFIG"]
+__all__ = ["AppConfig", "load_config"]
