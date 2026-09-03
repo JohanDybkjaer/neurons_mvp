@@ -4,6 +4,7 @@ PORT ?= 8000
 DOCKER_IMAGE ?= visual-recommendations-mvp
 DOCKER_PORT ?= 8000
 DOCKER_CONFIG ?= config/dev.toml
+RUNTIME_VOLUME ?= visual-recommendations-mvp-runtime
 ENV_FILE ?= .env
 
 ## Create the ignored secret file once and require a real key before startup.
@@ -32,4 +33,5 @@ docker-run: check-api-key
 	docker run --rm --publish $(DOCKER_PORT):8000 \
 		--env-file $(ENV_FILE) \
 		--env APP_CONFIG_FILE=$(DOCKER_CONFIG) \
+		--mount type=volume,source=$(RUNTIME_VOLUME),target=/app/runtime \
 		$(DOCKER_IMAGE)

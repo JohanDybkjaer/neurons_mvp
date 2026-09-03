@@ -110,6 +110,14 @@ uv run pytest
   one Uvicorn worker.
 - CI runs Python checks, then builds the image and probes its user, `/health`,
   and `/docs`.
+- `make docker-run` keeps artifacts and logs in the named Docker volume
+  `visual-recommendations-mvp-runtime`, mounted at `/app/runtime`.
+
+Inspect that volume after running a task:
+
+```shell
+docker run --rm --mount type=volume,source=visual-recommendations-mvp-runtime,target=/app/runtime alpine ls -R /app/runtime
+```
 
 ## What this does not try to solve
 

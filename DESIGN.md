@@ -29,7 +29,7 @@ flowchart TD
 - **No agent framework:** the workflow is a short, explicit feedback loop. A
   planner or tool-calling loop would not improve this assignment.
 - **Repair from the original:** each repair receives the latest failed checks,
-  but starts with the original creative to avoid accumulated visual changes.
+  but starts with the original creative to avoid accumulated visual drift.
 - **One evaluator request per variant:** it compares both images and checks all
   recommendations and brand criteria together, which keeps cost and judgments
   consistent.
@@ -51,6 +51,8 @@ flowchart TD
   credential-free, and do not use the network.
 - Errors and logs exclude secrets, image bytes, full prompts, and provider
   payloads.
+- Docker runs keep local artifacts and logs in one named runtime volume; task
+  state remains in process memory and is not restored after restart.
 
 ## What I would add when it is needed
 
