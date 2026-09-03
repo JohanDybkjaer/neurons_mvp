@@ -6,15 +6,16 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from conftest import TEST_API_KEY, make_evaluation, upload_payload
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.config import AppConfig, load_config
 from app.main import create_app
 from app.schema_models import TaskState, TaskStatus
-from conftest import TEST_API_KEY, make_evaluation, upload_payload
 
 TASKS_PATH = "/api/v1/tasks"
+SAMPLE_INPUT_DIRECTORY = Path("examples/demo")
 
 
 def make_test_config(tmp_path, **overrides):
@@ -72,6 +73,60 @@ class RecordingService:
         return make_evaluation(recommendations, brand_guidelines, passes)
 
 
+def test_supplied_sample_inputs_complete_through_product_endpoint(tmp_path):
+    """Keep the supplied assignment files usable through the public task API."""
+
+    service = RecordingService()
+    files = [
+        (
+            "images",
+            (
+                filename,
+                (SAMPLE_INPUT_DIRECTORY / filename).read_bytes(),
+                "image/png",
+            ),
+        )
+        for filename in ("creative_1.png", "creative_2.png")
+    ]
+    files.extend(
+        [
+            (
+                "recommendations",
+                (
+                    "recommendations.json",
+                    (SAMPLE_INPUT_DIRECTORY / "recommendations.json").read_bytes(),
+                    "application/json",
+                ),
+            ),
+            (
+                "brand_guidelines",
+                (
+                    "brand_guidelines.json",
+                    (SAMPLE_INPUT_DIRECTORY / "brand_guidelines.json").read_bytes(),
+                    "application/json",
+                ),
+            ),
+        ]
+    )
+
+    with TestClient(
+        create_app(service=service, config=make_test_config(tmp_path))
+    ) as client:
+        response = client.post(TASKS_PATH, files=files)
+
+        assert response.status_code == 202
+        task = client.get(response.json()["status_url"]).json()
+        assert task["status"] == TaskStatus.completed
+        assert [result["source_filename"] for result in task["results"]] == [
+            "creative_1.png",
+            "creative_2.png",
+        ]
+        assert all(
+            client.get(result["variant_url"]).status_code == 200
+            for result in task["results"]
+        )
+
+
 def test_health_swagger_and_openapi_expose_contract(tmp_path):
     client = TestClient(create_app(config=make_test_config(tmp_path)))
 
@@ -86,9 +141,8 @@ def test_health_swagger_and_openapi_expose_contract(tmp_path):
         f"{TASKS_PATH}/{{task_id}}/variants/{{image_id}}",
         "/health",
     } <= set(schema["paths"])
-    request_content = schema["paths"][TASKS_PATH]["post"]["requestBody"][
-        "content"
-    ]
+    assert "/api/v1/demo/tasks" not in schema["paths"]
+    request_content = schema["paths"][TASKS_PATH]["post"]["requestBody"]["content"]
     assert "multipart/form-data" in request_content
     body_reference = request_content["multipart/form-data"]["schema"]["$ref"]
     body_name = body_reference.rsplit("/", maxsplit=1)[-1]
@@ -155,9 +209,7 @@ def test_application_startup_keeps_artifacts_and_clears_runtime_state(tmp_path):
     assert "stale log entry" not in log_output
 
 
-def test_validation_rejections_are_logged_without_uploaded_content(
-    tmp_path, png_bytes
-):
+def test_validation_rejections_are_logged_without_uploaded_content(tmp_path, png_bytes):
     config = make_test_config(tmp_path)
     log_file = tmp_path.parent / "logs" / "app.log"
 
@@ -223,12 +275,10 @@ def test_ten_image_task_completes_with_retrievable_variants(
     assert all(result["attempts"] == 1 for result in task["results"])
     assert all(result["evaluation"]["overall_pass"] for result in task["results"])
     assert all(
-        len(result["evaluation"]["recommendations"]) == 3
-        for result in task["results"]
+        len(result["evaluation"]["recommendations"]) == 3 for result in task["results"]
     )
     assert all(
-        len(result["evaluation"]["brand_checks"]) == 5
-        for result in task["results"]
+        len(result["evaluation"]["brand_checks"]) == 5 for result in task["results"]
     )
     input_directory = tmp_path / created["task_id"] / "inputs"
     assert json.loads(
@@ -243,7 +293,9 @@ def test_ten_image_task_completes_with_retrievable_variants(
         assert variant.content == png_bytes
 
     assert len(service.evaluation_calls) == 10
-    assert all(call[1] == ["rec_1", "rec_2", "rec_3"] for call in service.evaluation_calls)
+    assert all(
+        call[1] == ["rec_1", "rec_2", "rec_3"] for call in service.evaluation_calls
+    )
 
 
 def test_workflow_step_metadata_is_logged_to_stdout(
@@ -321,7 +373,10 @@ def test_invalid_json_is_rejected(tmp_path, png_bytes):
         TASKS_PATH,
         files=[
             ("images", ("creative.png", png_bytes, "image/png")),
-            ("recommendations", ("recommendations.json", "not-json", "application/json")),
+            (
+                "recommendations",
+                ("recommendations.json", "not-json", "application/json"),
+            ),
             ("brand_guidelines", ("guidelines.json", "{}", "application/json")),
         ],
     )
@@ -330,9 +385,7 @@ def test_invalid_json_is_rejected(tmp_path, png_bytes):
     assert response.json() == {"detail": "Invalid recommendations JSON."}
 
 
-def test_invalid_image_is_rejected(
-    tmp_path, recommendations, brand_guidelines
-):
+def test_invalid_image_is_rejected(tmp_path, recommendations, brand_guidelines):
     images, recommendations_file, guidelines_file = upload_payload(
         b"not-an-image", recommendations, brand_guidelines, ("creative.png",)
     )

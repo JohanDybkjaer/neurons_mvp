@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --frozen
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy
+      - run: uv run pytest
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build --tag visual-recommendations-mvp:test .
+      - run: docker run --rm --entrypoint id visual-recommendations-mvp:test | grep -q 'uid=10001(appuser)'
+      - run: docker run --detach --rm --name visual-recommendations-mvp-test --publish 8000:8000 --env OPENAI_API_KEY=ci-placeholder --env APP_CONFIG_FILE=config/test.toml visual-recommendations-mvp:test
+      - run: |
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:8000/health && curl --fail --silent http://127.0.0.1:8000/docs > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs visual-recommendations-mvp-test
+          exit 1
+      - if: always()
+        run: docker rm --force visual-recommendations-mvp-test || true

@@ -1,16 +1,18 @@
 import asyncio
 import base64
+import io
 import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from conftest import make_evaluation, write_original
 from openai import BadRequestError
+from PIL import Image
 from pydantic import ValidationError
 
 from app.ai_services import OpenAIService
-from conftest import make_evaluation, write_original
 
 
 def make_client(image_response=None, evaluation_response=None):
@@ -50,9 +52,7 @@ def test_generate_variant_calls_image_edit_and_writes_result(
     assert "input_fidelity" not in call
     assert "Brand guidelines (authoritative)" in call["prompt"]
     assert all(item.id in call["prompt"] for item in recommendations)
-    assert all(
-        criterion in call["prompt"] for criterion in brand_guidelines.criteria()
-    )
+    assert all(criterion in call["prompt"] for criterion in brand_guidelines.criteria())
 
 
 def test_generate_variant_repair_prompt_uses_only_validated_failed_checks(
@@ -85,6 +85,70 @@ def test_generate_variant_repair_prompt_uses_only_validated_failed_checks(
     assert feedback.brand_checks[0].reason in prompt
 
 
+def test_generate_variant_rejects_non_image_provider_bytes(
+    tmp_path, png_bytes, recommendations, brand_guidelines
+):
+    """Do not persist base64 data that cannot be decoded as the requested image."""
+
+    original_path = tmp_path / "original.png"
+    destination_path = tmp_path / "variant.png"
+    write_original(original_path, png_bytes)
+    image_response = SimpleNamespace(
+        data=[SimpleNamespace(b64_json=base64.b64encode(b"not an image").decode())]
+    )
+    service = OpenAIService(
+        make_client(image_response=image_response),
+        "image-model",
+        "evaluation-model",
+    )
+
+    with pytest.raises(ValueError, match="Image provider returned invalid image data"):
+        asyncio.run(
+            service.generate_variant(
+                original_path,
+                destination_path,
+                recommendations,
+                brand_guidelines,
+            )
+        )
+
+    assert not destination_path.exists()
+
+
+def test_generate_variant_rejects_unexpected_provider_image_format(
+    tmp_path, png_bytes, recommendations, brand_guidelines
+):
+    """Do not save a valid image when it differs from the requested format."""
+
+    original_path = tmp_path / "original.png"
+    destination_path = tmp_path / "variant.png"
+    write_original(original_path, png_bytes)
+    jpeg_buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), color="navy").save(jpeg_buffer, format="JPEG")
+    image_response = SimpleNamespace(
+        data=[
+            SimpleNamespace(b64_json=base64.b64encode(jpeg_buffer.getvalue()).decode())
+        ]
+    )
+    service = OpenAIService(
+        make_client(image_response=image_response),
+        "image-model",
+        "evaluation-model",
+    )
+
+    with pytest.raises(ValueError, match="Image provider returned invalid image data"):
+        asyncio.run(
+            service.generate_variant(
+                original_path,
+                destination_path,
+                recommendations,
+                brand_guidelines,
+            )
+        )
+
+    assert not destination_path.exists()
+
+
 def test_evaluate_variant_sends_both_images_and_all_criteria_once(
     tmp_path, png_bytes, recommendations, brand_guidelines
 ):
@@ -93,9 +157,7 @@ def test_evaluate_variant_sends_both_images_and_all_criteria_once(
     write_original(original_path, png_bytes)
     write_original(variant_path, png_bytes)
     evaluation = make_evaluation(recommendations, brand_guidelines, True)
-    client = make_client(
-        evaluation_response=SimpleNamespace(output_parsed=evaluation)
-    )
+    client = make_client(evaluation_response=SimpleNamespace(output_parsed=evaluation))
     service = OpenAIService(client, "image-model", "evaluation-model")
 
     result = asyncio.run(
@@ -116,12 +178,9 @@ def test_evaluate_variant_sends_both_images_and_all_criteria_once(
     image_parts = [part for part in content if part["type"] == "input_image"]
     assert len(image_parts) == 2
     assert all(
-        part["image_url"].startswith("data:image/png;base64,")
-        for part in image_parts
+        part["image_url"].startswith("data:image/png;base64,") for part in image_parts
     )
-    prompt = "\n".join(
-        part["text"] for part in content if part["type"] == "input_text"
-    )
+    prompt = "\n".join(part["text"] for part in content if part["type"] == "input_text")
     assert all(item.id in prompt for item in recommendations)
     assert all(criterion in prompt for criterion in brand_guidelines.criteria())
 

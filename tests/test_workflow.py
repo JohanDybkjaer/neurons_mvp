@@ -3,10 +3,10 @@ import logging
 import shutil
 
 import pytest
+from conftest import make_evaluation, write_original
 
 from app.schema_models import TaskState, TaskStatus
 from app.workflows import ImageWorkItem, run_task
-from conftest import make_evaluation, write_original
 
 
 @pytest.fixture
@@ -134,8 +134,27 @@ class RepairService:
         brand_guidelines,
     ):
         self.evaluation_calls += 1
-        return make_evaluation(
-            recommendations, brand_guidelines, self.outcomes.pop(0)
+        return make_evaluation(recommendations, brand_guidelines, self.outcomes.pop(0))
+
+
+class InconsistentAggregateService(RepairService):
+    """Return deliberately contradictory aggregate fields from an evaluator."""
+
+    async def evaluate_variant(
+        self,
+        original_path,
+        variant_path,
+        recommendations,
+        brand_guidelines,
+    ):
+        evaluation = await super().evaluate_variant(
+            original_path,
+            variant_path,
+            recommendations,
+            brand_guidelines,
+        )
+        return evaluation.model_copy(
+            update={"overall_pass": not evaluation.overall_pass}
         )
 
 
@@ -187,6 +206,26 @@ def test_failed_first_evaluation_causes_one_repair_from_original(
         "image_id=all step=task attempt=1 outcome=success image_count=1" in message
         for message in messages
     )
+
+
+def test_workflow_derives_overall_pass_from_individual_checks(
+    tmp_path, png_bytes, recommendations, brand_guidelines
+):
+    """A contradictory aggregate field cannot bypass a required repair."""
+
+    item = make_work_item(
+        tmp_path, "image_1", png_bytes, recommendations, brand_guidelines
+    )
+    service = InconsistentAggregateService([False, True])
+    task = TaskState(task_id="task-id", status=TaskStatus.pending)
+
+    asyncio.run(run_task(task, [item], service, timeout_seconds=120, max_iterations=2))
+
+    assert task.status == TaskStatus.completed
+    assert task.results[0].attempts == 2
+    assert task.results[0].evaluation.overall_pass is True
+    assert service.evaluation_calls == 2
+    assert service.generation_calls[1][1].overall_pass is False
 
 
 def test_failed_second_evaluation_is_final_and_task_is_completed(
@@ -368,17 +407,14 @@ def test_unvalidated_evaluator_output_cannot_control_workflow(
     assert task.results == []
     messages = [record.getMessage() for record in workflow_log_records]
     assert any(
-        "step=generation attempt=1 outcome=success" in message
+        "step=generation attempt=1 outcome=success" in message for message in messages
+    )
+    assert any(
+        "step=evaluation attempt=1 outcome=failed error_type=ValidationError" in message
         for message in messages
     )
     assert any(
-        "step=evaluation attempt=1 outcome=failed error_type=ValidationError"
-        in message
-        for message in messages
-    )
-    assert any(
-        "step=pipeline attempt=1 outcome=failed error_type=ValidationError"
-        in message
+        "step=pipeline attempt=1 outcome=failed error_type=ValidationError" in message
         for message in messages
     )
     assert any(

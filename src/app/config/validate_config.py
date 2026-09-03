@@ -7,7 +7,7 @@ details at this boundary.
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from pydantic import (
     BaseModel,
@@ -125,10 +125,10 @@ def validate_config(
         # Convert the human-readable MiB setting once at the boundary; upload
         # code deals only in bytes and does not know about TOML units.
         return AppConfig(
-            openai_api_key=api_key,
+            openai_api_key=cast(SecretStr, api_key),
             image_model=document.providers.image_editor_model,
             evaluation_model=document.providers.evaluator_model,
-            log_level=document.logging.level,
+            log_level=cast(LogLevel, document.logging.level),
             runtime_root=document.storage.artifact_root,
             max_image_bytes=document.limits.max_image_size_mb * 1024 * 1024,
             max_iterations=document.limits.max_iterations,

@@ -1,10 +1,10 @@
 from pathlib import Path
 
 import pytest
+from conftest import TEST_API_KEY
 from pydantic import ValidationError
 
-from app.config import AppConfig, load_config
-from conftest import TEST_API_KEY
+from app.config import load_config
 
 
 def write_config(path: Path, **overrides: object) -> Path:
@@ -22,19 +22,19 @@ def write_config(path: Path, **overrides: object) -> Path:
     }
     lines = [
         "[providers]",
-        f'image_editor_model = {values["image_model"]!r}',
-        f'evaluator_model = {values["evaluation_model"]!r}',
-        f'timeout_seconds = {values["provider_timeout_seconds"]}',
+        f"image_editor_model = {values['image_model']!r}",
+        f"evaluator_model = {values['evaluation_model']!r}",
+        f"timeout_seconds = {values['provider_timeout_seconds']}",
         "",
         "[limits]",
-        f'max_image_size_mb = {values["max_image_bytes"] / 1024 / 1024:g}',
-        f'max_iterations = {values["max_iterations"]!r}',
+        f"max_image_size_mb = {values['max_image_bytes'] / 1024 / 1024:g}",
+        f"max_iterations = {values['max_iterations']!r}",
         "",
         "[logging]",
-        f'level = {values["log_level"]!r}',
+        f"level = {values['log_level']!r}",
         "",
         "[storage]",
-        f'artifact_root = {values["runtime_root"]!r}',
+        f"artifact_root = {values['runtime_root']!r}",
     ]
     path.write_text("\n".join(lines))
     return path
@@ -163,8 +163,7 @@ def test_load_config_rejects_missing_or_invalid_values_safely(
         "not valid toml =",
         'image_model = "only-one-setting"',
         Path("config/dev.toml").read_text() + '\nunknown_setting = "typo"\n',
-        Path("config/dev.toml").read_text()
-        + '\nopenai_api_key = "must-not-be-here"\n',
+        Path("config/dev.toml").read_text() + '\nopenai_api_key = "must-not-be-here"\n',
     ],
 )
 def test_load_config_rejects_malformed_incomplete_or_extra_toml(tmp_path, contents):

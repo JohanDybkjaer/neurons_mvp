@@ -15,8 +15,8 @@ from app.schema_models.inputs import (
 )
 from app.schema_models.misc import CodedErrorResponse, HealthResponse
 from app.schema_models.tasks import (
-    ImageResult,
     MAX_ITERATIONS,
+    ImageResult,
     TaskCreated,
     TaskState,
     TaskStatus,

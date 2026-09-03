@@ -1,302 +1,131 @@
 # Visual Recommendations MVP
 
-A small FastAPI service that edits marketing creatives from structured
-recommendations, evaluates each generated variant against brand guidelines, and
-returns a retrievable final image with a structured evaluation.
+Async FastAPI service for generating and evaluating improved marketing creatives
+from structured recommendations and brand guidelines.
 
-The service is deliberately bounded: a request accepts up to ten images, runs
-at most two image pipelines at once, and permits no more than five
-generation-and-evaluation iterations per image. See [DESIGN.md](DESIGN.md) for
-the architecture and deliberate MVP limitations.
+## Quick overview
 
-## What you can do
+- **Try it:** Start the service, open Swagger UI, and submit the supplied sample
+  files to `POST /api/v1/tasks`.
+- **Workflow:** Generate from the original → evaluate all checks → repair only
+  when required → return the final variant.
+- **Implementation:** An async task API, deterministic tests, Docker, and CI.
+- **Scope:** A small MVP, not a full production platform.
 
-- Submit one to ten PNG or JPEG creatives with matching recommendation and
-  brand-guideline JSON files.
-- Poll a task while it runs, then retrieve each final generated variant.
-- Use the bundled two-image demo without preparing uploads.
-- Set `max_iterations` from 1 through 5 to control the per-image repair limit.
+## Run the service
 
-The server starts without calling OpenAI. A demo or task submission uses the
-configured provider models and can incur API costs.
+### Docker (recommended)
 
-## Requirements
+This packages and runs the entire API: `Docker container → Uvicorn → FastAPI`.
+It uses the same image CI builds, and you do not need to install `uv`.
 
-- Python 3.11 or later
-- [uv](https://docs.astral.sh/uv/)
-- An OpenAI API key only when submitting a task or running the real-API smoke
-  test
+1. Build the image.
 
-## Quick start
+   ```shell
+   make docker-build
+   ```
 
-Install the locked project dependencies:
+2. Start the container.
 
-```shell
-# Create the project environment from uv.lock.
-uv sync
-```
+   ```shell
+   make docker-run
+   ```
 
-Create the local secret file:
+3. On the first run, Make creates the ignored `.env` file and stops.
+4. Set `OPENAI_API_KEY` in `.env`.
+5. Run `make docker-run` again.
+6. Open [Swagger UI](http://127.0.0.1:8000/docs).
 
-```shell
-# Copy the safe API-key placeholder into an ignored local file.
-cp .env.example .env
-```
+### Local development with uv
 
-Set `OPENAI_API_KEY` in `.env` when you are ready to make paid provider calls:
+Use this path only when changing or debugging the application.
 
-```dotenv
-# .env contains secrets only and must remain uncommitted.
-OPENAI_API_KEY=your_api_key_here
-```
+1. Start the API.
 
-Start the development configuration:
+   ```shell
+   make dev
+   ```
 
-```shell
-# Select the committed development configuration and start one Uvicorn worker.
-make dev
-```
+2. On the first run, Make creates `.env` and stops.
+3. Set `OPENAI_API_KEY` in `.env`, then run `make dev` again.
+4. Open [Swagger UI](http://127.0.0.1:8000/docs).
 
-The launcher defaults to port 8001. To use another local port:
+## Submit the supplied sample inputs
 
-```shell
-make dev PORT=8002
-```
+1. In Swagger UI, open `POST /api/v1/tasks` and select **Try it out**.
+2. Upload both creatives, `recommendations.json`, and `brand_guidelines.json`
+   from [`examples/demo/`](examples/demo/).
+3. Select **Execute** and copy the returned `task_id`.
+4. Open `GET /api/v1/tasks/{task_id}`, enter the task ID, and execute until the
+   status is `completed` or `failed`.
+5. When completed, use each result's `variant_url` to download the final image.
 
-Application logs continue to appear in the terminal and are also written to
-`runtime/logs/app.log`. Starting the API clears prior runtime logs, so this
-file contains only the current run. Task artifacts remain under
-`runtime/tasks/` for manual inspection. The `runtime/` directory is ignored by
-Git.
+## API
 
-Check that the process is running:
-
-```shell
-# The health endpoint never calls the provider.
-curl http://127.0.0.1:8001/health
-```
-
-Expected response:
-
-```json
-{
-  "status": "ok"
-}
-```
-
-Open [Swagger UI](http://127.0.0.1:8001/docs) to submit and inspect requests
-interactively. The route descriptions, field descriptions, response examples,
-and response schemas are generated from FastAPI and Pydantic metadata.
-
-## Run a task
-
-### Try the bundled demo
-
-The demo endpoint uses the committed images and JSON documents in
-[`examples/demo/`](examples/demo/) when no files are supplied. It follows the
-same validation, workflow, limits, and provider configuration as a normal task.
-
-Submit the bundled demo only when you are ready for paid calls:
-
-```shell
-# Submit the two bundled creatives and receive a polling URL.
-curl -X POST http://127.0.0.1:8001/api/v1/demo/tasks
-```
-
-The response is returned immediately while processing continues:
-
-```json
-{
-  "task_id": "7f2b4f9d-6c65-4b38-8e73-487750d0c478",
-  "status": "pending",
-  "status_url": "/api/v1/demo/tasks/7f2b4f9d-6c65-4b38-8e73-487750d0c478"
-}
-```
-
-Poll the `status_url` from the response until the status becomes `completed` or
-`failed`:
-
-```shell
-# Replace <task_id> with the task ID returned by the POST response.
-curl http://127.0.0.1:8001/api/v1/demo/tasks/<task_id>
-```
-
-A completed task returns one result per image. `attempts` is the number of
-generation-and-evaluation pairs that actually ran, while `overall_pass` is the
-final evaluation outcome:
-
-```json
-{
-  "task_id": "7f2b4f9d-6c65-4b38-8e73-487750d0c478",
-  "status": "completed",
-  "results": [
-    {
-      "image_id": "image_1",
-      "source_filename": "creative_1.png",
-      "variant_url": "/api/v1/demo/tasks/<task_id>/variants/image_1",
-      "attempts": 1,
-      "evaluation": {
-        "recommendations": [
-          {
-            "id": "rec_1",
-            "applied": true,
-            "reason": "The requested visual change is visible."
-          }
-        ],
-        "brand_checks": [
-          {
-            "criterion": "Keep the logo",
-            "compliant": true,
-            "reason": "The logo remains visible."
-          }
-        ],
-        "overall_pass": true
-      }
-    }
-  ],
-  "error": null
-}
-```
-
-Download an image only after its task is complete:
-
-```shell
-# Replace <task_id> and <image_id> with values from a completed task result.
-curl --output variant.png \
-  http://127.0.0.1:8001/api/v1/demo/tasks/<task_id>/variants/<image_id>
-```
-
-### Submit your own creatives
-
-`POST /api/v1/tasks` requires three multipart fields:
-
-| Field | Required value |
+| Endpoint | Purpose |
 | --- | --- |
-| `images` | One to ten PNG or JPEG files, submitted once per image. |
-| `recommendations` | One JSON file with recommendations for every filename. |
-| `brand_guidelines` | One JSON file with guidelines for every filename. |
+| `POST /api/v1/tasks` | Submit one or more image uploads and matching JSON files. |
+| `GET /api/v1/tasks/{task_id}` | Poll task state and final evaluations. |
+| `GET /api/v1/tasks/{task_id}/variants/{image_id}` | Download a final variant. |
+| `GET /health` | Confirm the process is running. |
 
-The outer keys of the JSON files are arbitrary labels. The `filename` inside
-each entry is the join key and must exactly match an uploaded image filename.
-The complete two-image files are available as
-[recommendations.json](examples/demo/recommendations.json) and
-[brand_guidelines.json](examples/demo/brand_guidelines.json).
+Task submission returns `202 Accepted`; the client polls until the task is
+`completed` or `failed`.
 
-This is the required shape for one entry in `recommendations.json`:
+## Behavior worth knowing
 
-```json
-{
-  "image1": {
-    "filename": "creative_1.png",
-    "recommendations": [
-      {
-        "id": "rec_1",
-        "title": "Add a focal accent",
-        "description": "Add a small red circle below the headline.",
-        "type": "composition"
-      }
-    ]
-  }
-}
-```
+- PNG and JPEG inputs only; JSON filenames must exactly match uploaded files.
+- One evaluator request checks every recommendation and brand criterion for a
+  variant.
+- Independent image pipelines run concurrently within a fixed per-task bound.
+- Repairs always start from the original creative, preventing visual drift.
+- `overall_pass` is derived from validated individual checks, not trusted as a
+  model-provided summary.
+- Task IDs, image IDs, and artifact paths are server-owned.
 
-The matching `brand_guidelines.json` entry has the same filename:
+## Configuration
 
-```json
-{
-  "image1": {
-    "filename": "creative_1.png",
-    "brand_guidelines": {
-      "protected_regions": ["Keep the logo"],
-      "typography": "Maintain the existing typography.",
-      "aspect_ratio": "Maintain the original aspect ratio.",
-      "brand_elements": "Keep brand elements visible."
-    }
-  }
-}
-```
+- `.env` or the deployment environment supplies the secret `OPENAI_API_KEY`.
+- `APP_CONFIG_FILE` selects one complete non-secret TOML document.
+- [`config/dev.toml`](config/dev.toml) and
+  [`config/test.toml`](config/test.toml) are the authoritative examples for
+  provider, timeout, limit, logging, and storage values.
+- Runtime values intentionally live in TOML rather than being duplicated here.
 
-Submit the committed two-image example through the product endpoint:
+## Verify
 
 ```shell
-# Submit both creatives and the JSON documents that reference their filenames.
-curl -X POST http://127.0.0.1:8001/api/v1/tasks \
-  -F "images=@examples/demo/creative_1.png;type=image/png" \
-  -F "images=@examples/demo/creative_2.png;type=image/png" \
-  -F "recommendations=@examples/demo/recommendations.json;type=application/json" \
-  -F "brand_guidelines=@examples/demo/brand_guidelines.json;type=application/json"
-```
-
-Use the returned `status_url` exactly as in the demo flow. The product endpoint
-uses `/api/v1/tasks/<task_id>` instead of `/api/v1/demo/tasks/<task_id>`.
-
-## Configuration and limits
-
-Choose exactly one complete TOML document with `APP_CONFIG_FILE`. `.env` is
-secret-only: `OPENAI_API_KEY` from the shell or container environment takes
-precedence over `.env`, while every non-secret setting comes from the selected
-TOML file.
-
-| Setting | Development value | Meaning |
-| --- | --- | --- |
-| `providers.image_editor_model` | `gpt-image-2` | Model used to edit creatives. |
-| `providers.evaluator_model` | `gpt-5.6-terra` | Model used to evaluate variants. |
-| `providers.timeout_seconds` | `120` | Timeout applied to each provider operation. |
-| `limits.max_image_size_mb` | `10` | Maximum accepted upload size per image. |
-| `limits.max_iterations` | `2` | Maximum generation/evaluation pairs for each image. |
-| `logging.level` | `DEBUG` | Application log threshold. |
-| `storage.artifact_root` | `runtime/tasks` | Server-managed task input and variant directory. |
-
-The initial generation and evaluation count as iteration 1. Set
-`max_iterations = 1` to disable repairs. The configuration accepts values from
-1 through 5, and the workflow enforces five as a hard cap even for direct calls.
-
-When an evaluation fails and an iteration remains, the next generation uses the
-original creative and only the latest failed checks as feedback. It does not
-edit a previous generated variant, which avoids cumulative drift.
-
-| Fixed workflow limit | Value |
-| --- | --- |
-| Images per request | 1–10 |
-| Active image pipelines per task | 2 |
-| Maximum iterations per image | 5 |
-
-At most two image pipelines are active per task. Within one pipeline,
-generation and evaluation are sequential. A visual failure at the configured
-limit still produces a `completed` task with `overall_pass: false`; `failed` is
-reserved for technical execution errors.
-
-## Test safely before a real request
-
-Run the default credential-free suite:
-
-```shell
-# Run deterministic tests with the fake AI service.
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy
 uv run pytest
 ```
 
-Run the opt-in real-API smoke test only when you are ready for a small paid
-request. It creates one local creative, generates one variant, and evaluates it
-without visually inspecting the generated image:
+- Default tests are deterministic and never call OpenAI.
+- The real-provider smoke test requires `RUN_OPENAI_SMOKE_TEST=1` and a key.
+
+## Container checks
+
+- The Docker image installs from `uv.lock`, runs as a non-root user, and starts
+  one Uvicorn worker.
+- CI runs Python checks, then builds the image and probes its user, `/health`,
+  and `/docs`.
+- `make docker-run` keeps artifacts and logs in the named Docker volume
+  `visual-recommendations-mvp-runtime`, mounted at `/app/runtime`.
+
+Inspect that volume after running a task:
 
 ```shell
-# Opt into one paid image edit and one paid evaluation.
-APP_CONFIG_FILE=config/dev.toml RUN_OPENAI_SMOKE_TEST=1 uv run pytest -m real_api
+docker run --rm --mount type=volume,source=visual-recommendations-mvp-runtime,target=/app/runtime alpine ls -R /app/runtime
 ```
 
-## Project map
+## What this does not try to solve
 
-| Path | Responsibility |
-| --- | --- |
-| `src/app/main.py` | Application composition, lifespan, and process-local state. |
-| `src/app/api/` | HTTP routes, upload validation, task polling, and artifacts. |
-| `src/app/config/` | TOML selection, secret loading, and typed validation. |
-| `src/app/schema_models/` | Pydantic input, evaluation, task, and OpenAPI schemas. |
-| `src/app/workflows/` | Bounded generation, evaluation, repair, and concurrency. |
-| `src/app/ai_services/openai.py` | OpenAI image-edit and visual-evaluation requests. |
-| `examples/demo/` | Committed demo images and matching JSON documents. |
+- Process-local task state and local artifacts; a restart cannot resume tasks.
+- No authentication, tenant isolation, durable queue, database, or object
+  storage.
+- Model evaluations are useful judgements, not pixel-perfect proof of brand
+  compliance.
+- No automatic provider retries or partial-success task responses.
 
-The service runs as one Uvicorn worker with process-local task state. Restarting
-the process clears task status and runtime logs; prior task artifacts remain on
-disk but cannot be retrieved through the restarted API. This is an intentional
-MVP limitation documented in [DESIGN.md](DESIGN.md).
+For the workflow diagram and trade-offs, see [DESIGN.md](DESIGN.md).
