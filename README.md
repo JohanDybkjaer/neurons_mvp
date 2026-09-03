@@ -10,41 +10,55 @@ from structured recommendations and brand guidelines.
 - **Workflow:** Generate from the original → evaluate all checks → repair only
   when required → return the final variant.
 - **Implementation:** An async task API, deterministic tests, Docker, and CI.
-- **Scope:** A small MVP  , not a full production platform.
+- **Scope:** A small MVP, not a full production platform.
 
-## Start the service
+## Run the service
 
-Choose one path.
+### Docker (recommended)
 
-### 1. Docker
+This packages and runs the entire API: `Docker container → Uvicorn → FastAPI`.
+It uses the same image CI builds, and you do not need to install `uv`.
 
-Use this path to run the same container that CI builds.
+1. Build the image.
 
-```shell
-make docker-build
-make docker-run
-```
+   ```shell
+   make docker-build
+   ```
 
-### 2. Local development with uv
+2. Start the container.
 
-Use this path when changing or debugging the application.
+   ```shell
+   make docker-run
+   ```
 
-```shell
-make dev
-```
+3. On the first run, Make creates the ignored `.env` file and stops.
+4. Set `OPENAI_API_KEY` in `.env`.
+5. Run `make docker-run` again.
+6. Open [Swagger UI](http://127.0.0.1:8000/docs).
 
-On the first `make docker-run` or `make dev`, Make creates the ignored `.env`
-file and tells you to set `OPENAI_API_KEY`. Set it once, then repeat the same
-command. Docker users do not need to install `uv`; it is inside the image.
+### Local development with uv
+
+Use this path only when changing or debugging the application.
+
+1. Start the API.
+
+   ```shell
+   make dev
+   ```
+
+2. On the first run, Make creates `.env` and stops.
+3. Set `OPENAI_API_KEY` in `.env`, then run `make dev` again.
+4. Open [Swagger UI](http://127.0.0.1:8000/docs).
 
 ## Submit the supplied sample inputs
 
-- Open [Swagger UI](http://127.0.0.1:8000/docs).
-- Submit `POST /api/v1/tasks` with both creatives, `recommendations.json`, and
-  `brand_guidelines.json` from [`examples/demo/`](examples/demo/).
-- Poll the returned `status_url`, then retrieve each result's `variant_url`.
-- The server needs an API key at startup but makes no provider call until task
-  submission.
+1. In Swagger UI, open `POST /api/v1/tasks` and select **Try it out**.
+2. Upload both creatives, `recommendations.json`, and `brand_guidelines.json`
+   from [`examples/demo/`](examples/demo/).
+3. Select **Execute** and copy the returned `task_id`.
+4. Open `GET /api/v1/tasks/{task_id}`, enter the task ID, and execute until the
+   status is `completed` or `failed`.
+5. When completed, use each result's `variant_url` to download the final image.
 
 ## API
 
