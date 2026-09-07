@@ -17,9 +17,11 @@ from app.config import AppConfig
 from app.schema_models import (
     BrandGuidelineFile,
     BrandGuidelinesDocument,
+    ImageDemoDebug,
     RecommendationFile,
     RecommendationsDocument,
     TaskCreated,
+    TaskDemoDebug,
     TaskState,
     TaskStatus,
 )
@@ -224,6 +226,16 @@ async def submit_task(
     task = TaskState(task_id=task_id, status=TaskStatus.pending)
     request.app.state.tasks[task_id] = task
     request.app.state.variant_paths[task_id] = variant_paths
+    debug_images: dict[str, ImageDemoDebug] | None = None
+    if app_config.log_level == "DEBUG":
+        debug_images = {
+            item.image_id: ImageDemoDebug(
+                image_id=item.image_id,
+                source_filename=item.source_filename,
+            )
+            for item in work_items
+        }
+        request.app.state.demo_debug[task_id] = list(debug_images.values())
     background_tasks.add_task(
         run_task,
         task,
@@ -231,6 +243,7 @@ async def submit_task(
         request.app.state.service,
         app_config.provider_timeout_seconds,
         app_config.max_iterations,
+        debug_images,
     )
     LOGGER.info(
         "task_id=%s image_id=all step=submission outcome=accepted image_count=%d",
@@ -253,6 +266,20 @@ def read_task(request: Request, task_id: str) -> TaskState:
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found."
         )
     return cast(TaskState, task)
+
+
+def read_demo_debug(request: Request, task_id: str) -> TaskDemoDebug:
+    """Return text-only provider correspondence for a debug-enabled task."""
+
+    task = read_task(request, task_id)
+    app_config = cast(AppConfig, request.app.state.config)
+    images = request.app.state.demo_debug.get(task_id)
+    if app_config.log_level != "DEBUG" or images is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Debug correspondence not available.",
+        )
+    return TaskDemoDebug(task_id=task.task_id, status=task.status, images=images)
 
 
 def serve_variant(request: Request, task_id: str, image_id: str) -> FileResponse:

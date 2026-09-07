@@ -1,0 +1,190 @@
+[
+  {
+    "recommendations": [
+      {
+        "id": "rec_1",
+        "applied": true,
+        "reason": "A neon city-at-night background has been added, creating a more aspirational discovery/lifestyle context around the listener."
+      },
+      {
+        "id": "rec_2",
+        "applied": true,
+        "reason": "The headline now says “Discover your next favorite song.” and adds personalized, free-trial messaging: “30 DAYS FREE. YOUR MUSIC. YOUR VIBE.”"
+      },
+      {
+        "id": "rec_3",
+        "applied": true,
+        "reason": "The new headline is substantially larger, bold, white, and placed on a dark semi-transparent panel for strong contrast and immediate salience."
+      }
+    ],
+    "brand_checks": [
+      {
+        "criterion": "Do not modify or remove the brand logo",
+        "compliant": true,
+        "reason": "The GROOVEHUB wordmark and circular waveform logo remain present and visually intact."
+      },
+      {
+        "criterion": "Do not alter the product imagery (headphones)",
+        "compliant": true,
+        "reason": "The same white over-ear headphones remain visibly unchanged on the subject."
+      },
+      {
+        "criterion": "Maintain existing font style; text modifications should preserve readability",
+        "compliant": false,
+        "reason": "The new main headline uses a markedly more condensed display typeface than the original broad bold headline, though it remains readable."
+      },
+      {
+        "criterion": "Maintain original aspect ratio (636x1063)",
+        "compliant": true,
+        "reason": "The variant retains the same tall portrait aspect ratio as the original."
+      },
+      {
+        "criterion": "Product imagery must remain the focal point of the composition",
+        "compliant": false,
+        "reason": "The oversized headline and large dark text panel dominate the upper composition and compete more strongly for attention than the product imagery."
+      }
+    ],
+    "overall_pass": false
+  },
+  {
+    "recommendations": [
+      {
+        "id": "rec_1",
+        "applied": true,
+        "reason": "The headline is given stronger contrast and salience through a large white rounded-rectangle backdrop with a subtle shadow, without visibly enlarging the text."
+      },
+      {
+        "id": "rec_2",
+        "applied": true,
+        "reason": "The jacket’s yellow, blue, and pink panels appear substantially more saturated and defined, with brighter highlights and clearer garment detail."
+      },
+      {
+        "id": "rec_3",
+        "applied": false,
+        "reason": "The logo and headline are grouped within the same panel, but the cluster remains in the upper-left rather than the requested upper-right or center-right area."
+      }
+    ],
+    "brand_checks": [
+      {
+        "criterion": "Do not modify or remove the brand logo",
+        "compliant": true,
+        "reason": "The snowflake icon and 'snowstyle' wordmark remain visually unchanged and are not removed."
+      },
+      {
+        "criterion": "Do not alter the model's face",
+        "compliant": true,
+        "reason": "The model’s face remains visibly consistent with the original, with no evident facial replacement or alteration."
+      },
+      {
+        "criterion": "Maintain existing font style and hierarchy for all text elements",
+        "compliant": true,
+        "reason": "The text retains the original sans-serif styling, bold headline treatment, pink discount emphasis, and supporting-text hierarchy."
+      },
+      {
+        "criterion": "Maintain original aspect ratio (1572x1720)",
+        "compliant": true,
+        "reason": "The variant preserves the same portrait aspect ratio as the original."
+      },
+      {
+        "criterion": "Ensure logo remains visible and legible at all times",
+        "compliant": true,
+        "reason": "The logo is prominently displayed at the top of the white headline panel and is clearly legible."
+      }
+    ],
+    "overall_pass": false
+  },
+  {
+    "recommendations": [
+      {
+        "id": "rec_1",
+        "applied": true,
+        "reason": "The headline has stronger contrast through a rounded light-gradient panel, white edging, and shadow treatment without appearing physically larger."
+      },
+      {
+        "id": "rec_2",
+        "applied": true,
+        "reason": "The jacket’s yellow, cyan-blue, and pink panels are visibly more saturated and defined, with stronger contrast and garment-detail highlights."
+      },
+      {
+        "id": "rec_3",
+        "applied": true,
+        "reason": "The snowstyle logo is clustered directly above the headline in the upper-right area, creating a unified secondary focal point."
+      }
+    ],
+    "brand_checks": [
+      {
+        "criterion": "Do not modify or remove the brand logo",
+        "compliant": true,
+        "reason": "The snowflake icon and snowstyle wordmark remain present and visually consistent with the original logo."
+      },
+      {
+        "criterion": "Do not alter the model's face",
+        "compliant": true,
+        "reason": "The same model face is visibly retained without apparent facial-feature alteration."
+      },
+      {
+        "criterion": "Maintain existing font style and hierarchy for all text elements",
+        "compliant": true,
+        "reason": "The same bold headline, pink discount styling, and supporting website text hierarchy are retained; added effects do not change the underlying font style."
+      },
+      {
+        "criterion": "Maintain original aspect ratio (1572x1720)",
+        "compliant": true,
+        "reason": "The variant retains the original portrait-oriented aspect ratio."
+      },
+      {
+        "criterion": "Ensure logo remains visible and legible at all times",
+        "compliant": true,
+        "reason": "The logo is clearly visible and legible at the top of the headline panel."
+      }
+    ],
+    "overall_pass": true
+  },
+  {
+    "recommendations": [
+      {
+        "id": "rec_1",
+        "applied": true,
+        "reason": "Added glowing arcs, sparkles, and a more immersive styled background create a discovery-oriented lifestyle mood around the listener."
+      },
+      {
+        "id": "rec_2",
+        "applied": true,
+        "reason": "Headline is reframed as “Discover your soundtrack. Free for 30 days.”, emphasizing personal discovery and a free-trial offer."
+      },
+      {
+        "id": "rec_3",
+        "applied": true,
+        "reason": "The headline is substantially larger, bold, high-contrast white text and placed on a translucent rounded panel for strong prominence."
+      }
+    ],
+    "brand_checks": [
+      {
+        "criterion": "Do not modify or remove the brand logo",
+        "compliant": true,
+        "reason": "The GROOVEHUB wordmark and circular waveform logo remain visible and retain their original design."
+      },
+      {
+        "criterion": "Do not alter the product imagery (headphones)",
+        "compliant": true,
+        "reason": "The same white headphone product imagery remains visibly intact on the subject."
+      },
+      {
+        "criterion": "Maintain existing font style; text modifications should preserve readability",
+        "compliant": true,
+        "reason": "The variant retains a bold sans-serif headline style and all text is clearly readable."
+      },
+      {
+        "criterion": "Maintain original aspect ratio (636x1063)",
+        "compliant": true,
+        "reason": "The variant preserves the same tall portrait aspect ratio as the original."
+      },
+      {
+        "criterion": "Product imagery must remain the focal point of the composition",
+        "compliant": true,
+        "reason": "The large, centrally placed listener wearing the headphones remains the dominant visual focal point."
+      }
+    ],
+    "overall_pass": true
+  }
+]

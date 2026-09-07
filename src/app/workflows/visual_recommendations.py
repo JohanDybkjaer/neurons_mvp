@@ -10,16 +10,19 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Awaitable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypeVar
+from typing import Literal, TypeVar
 
-from app.ai_services import OpenAIService
+from app.ai_services import OpenAIDebugRecorder, OpenAIService, capture_openai_debug
 from app.schema_models import (
     MAX_ITERATIONS,
     BrandGuidelines,
     Evaluation,
+    ImageDemoDebug,
     ImageResult,
+    OpenAICorrespondence,
+    OpenAITextMessage,
     Recommendation,
     TaskState,
     TaskStatus,
@@ -42,6 +45,41 @@ class ImageWorkItem:
     brand_guidelines: BrandGuidelines
 
 
+@dataclass
+class _ImageDebugRecorder:
+    """Attach one provider exchange to one image and iteration."""
+
+    image_debug: ImageDemoDebug
+    step: int
+    _exchange: OpenAICorrespondence | None = field(default=None, init=False)
+
+    def record_request(
+        self,
+        operation: Literal["generation", "evaluation"],
+        model: str,
+        messages: list[OpenAITextMessage],
+    ) -> None:
+        """Store exact request text before the provider call begins."""
+
+        self._exchange = OpenAICorrespondence(
+            step=self.step,
+            operation=operation,
+            model=model,
+            request_messages=messages,
+        )
+        self.image_debug.correspondence.append(self._exchange)
+
+    def record_response(
+        self,
+        operation: Literal["generation", "evaluation"],
+        messages: list[OpenAITextMessage],
+    ) -> None:
+        """Attach exact textual output to the request already stored."""
+
+        if self._exchange is not None and self._exchange.operation == operation:
+            self._exchange.response_messages = messages
+
+
 async def _run_step(
     awaitable: Awaitable[ReturnType],
     timeout_seconds: float,
@@ -49,6 +87,7 @@ async def _run_step(
     image_id: str,
     step: str,
     attempt: int,
+    debug_recorder: OpenAIDebugRecorder | None = None,
 ) -> ReturnType:
     """Run one timed operation and log its safe outcome before re-raising errors."""
 
@@ -61,7 +100,11 @@ async def _run_step(
         attempt,
     )
     try:
-        result = await asyncio.wait_for(awaitable, timeout=timeout_seconds)
+        if debug_recorder is None:
+            result = await asyncio.wait_for(awaitable, timeout=timeout_seconds)
+        else:
+            with capture_openai_debug(debug_recorder):
+                result = await asyncio.wait_for(awaitable, timeout=timeout_seconds)
     except Exception as error:
         LOGGER.warning(
             (
@@ -139,6 +182,7 @@ async def _process_image(
     semaphore: asyncio.Semaphore,
     timeout_seconds: float,
     max_iterations: int,
+    image_debug: ImageDemoDebug | None = None,
 ) -> ImageResult:
     """Run bounded generation and evaluation iterations sequentially.
 
@@ -161,6 +205,11 @@ async def _process_image(
             for attempts in range(1, max_iterations + 1):
                 # Every iteration starts from the original creative to avoid
                 # cumulative drift from an earlier generated variant.
+                generation_debug = (
+                    _ImageDebugRecorder(image_debug, attempts)
+                    if image_debug is not None
+                    else None
+                )
                 await _run_step(
                     service.generate_variant(
                         item.original_path,
@@ -174,6 +223,12 @@ async def _process_image(
                     item.image_id,
                     "generation",
                     attempts,
+                    generation_debug,
+                )
+                evaluation_debug = (
+                    _ImageDebugRecorder(image_debug, attempts)
+                    if image_debug is not None
+                    else None
                 )
                 evaluation = await _run_step(
                     _request_evaluation(item, service),
@@ -182,6 +237,7 @@ async def _process_image(
                     item.image_id,
                     "evaluation",
                     attempts,
+                    evaluation_debug,
                 )
                 if evaluation.overall_pass:
                     break
@@ -231,6 +287,7 @@ async def run_task(
     service: OpenAIService,
     timeout_seconds: float,
     max_iterations: int,
+    debug_images: dict[str, ImageDemoDebug] | None = None,
 ) -> None:
     """Run image pipelines and mutate the supplied task to a terminal state.
 
@@ -280,6 +337,9 @@ async def run_task(
                         semaphore,
                         timeout_seconds,
                         bounded_iterations,
+                        debug_images.get(item.image_id)
+                        if debug_images is not None
+                        else None,
                     )
                     for item in work_items
                 )

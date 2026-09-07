@@ -105,6 +105,7 @@ def create_app(
         await asyncio.to_thread(_clear_runtime_logs, active_config.runtime_root)
         application.state.tasks.clear()
         application.state.variant_paths.clear()
+        application.state.demo_debug.clear()
         with _application_logging(active_config.log_level, active_config.runtime_root):
             LOGGER.info("application started")
             owned_client: AsyncOpenAI | None = None
@@ -142,6 +143,7 @@ def create_app(
     # running more than one worker would create independent, inconsistent views.
     application.state.tasks = {}
     application.state.variant_paths = {}
+    application.state.demo_debug = {}
     application.state.service = service
     application.state.config = config
     application.include_router(health_router)

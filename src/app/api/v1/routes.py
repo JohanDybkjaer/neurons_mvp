@@ -7,11 +7,12 @@ from fastapi.responses import FileResponse
 
 from app.api.task_operations import (
     BINARY_FILE_SCHEMA,
+    read_demo_debug,
     read_task,
     serve_variant,
     submit_task,
 )
-from app.schema_models import TaskCreated, TaskState
+from app.schema_models import TaskCreated, TaskDemoDebug, TaskState
 
 API_V1_PREFIX = "/api/v1"
 
@@ -81,6 +82,22 @@ async def get_task(request: Request, task_id: str) -> TaskState:
     """
 
     return read_task(request, task_id)
+
+
+@router.get(
+    "/tasks/{task_id}/demo-debug",
+    response_model=TaskDemoDebug,
+    summary="Inspect OpenAI text correspondence for a task",
+    response_description="Text-only provider messages grouped by image and step",
+)
+async def get_demo_debug(request: Request, task_id: str) -> TaskDemoDebug:
+    """Return debug-only OpenAI text requests and responses for each image.
+
+    This endpoint is available only while the application log level is
+    ``DEBUG``. It excludes uploaded/generated image bytes and data URLs.
+    """
+
+    return read_demo_debug(request, task_id)
 
 
 @router.get(

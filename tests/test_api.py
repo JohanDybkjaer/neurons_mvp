@@ -1,3 +1,4 @@
+import base64
 import json
 import re
 import shutil
@@ -10,6 +11,7 @@ from conftest import TEST_API_KEY, make_evaluation, upload_payload
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from app.ai_services import OpenAIService
 from app.config import AppConfig, load_config
 from app.main import create_app
 from app.schema_models import TaskState, TaskStatus
@@ -138,6 +140,7 @@ def test_health_swagger_and_openapi_expose_contract(tmp_path):
     assert {
         TASKS_PATH,
         f"{TASKS_PATH}/{{task_id}}",
+        f"{TASKS_PATH}/{{task_id}}/demo-debug",
         f"{TASKS_PATH}/{{task_id}}/variants/{{image_id}}",
         "/health",
     } <= set(schema["paths"])
@@ -164,6 +167,94 @@ def test_health_swagger_and_openapi_expose_contract(tmp_path):
         "True only when every recommendation and brand check passes."
     )
     assert evaluation_schema["examples"][0]["overall_pass"] is True
+
+
+def test_demo_debug_returns_text_only_openai_correspondence_by_image(
+    tmp_path, png_bytes, recommendations, brand_guidelines
+):
+    image_response = SimpleNamespace(
+        data=[
+            SimpleNamespace(
+                b64_json=base64.b64encode(png_bytes).decode(),
+                revised_prompt="Provider revised the image prompt.",
+            )
+        ]
+    )
+    evaluation = make_evaluation(recommendations, brand_guidelines, True)
+    evaluation_response = SimpleNamespace(
+        output_parsed=evaluation,
+        output_text='{"overall_pass":true,"source":"raw provider response"}',
+    )
+    provider_client = SimpleNamespace(
+        images=SimpleNamespace(edit=AsyncMock(return_value=image_response)),
+        responses=SimpleNamespace(parse=AsyncMock(return_value=evaluation_response)),
+    )
+    service = OpenAIService(provider_client, "image-model", "evaluation-model")
+    config = make_test_config(tmp_path, log_level="DEBUG", max_iterations=1)
+    images, recommendations_file, guidelines_file = upload_payload(
+        png_bytes,
+        recommendations,
+        brand_guidelines,
+        ("creative_1.png", "creative_2.png"),
+    )
+
+    with TestClient(create_app(service=service, config=config)) as client:
+        created = client.post(
+            TASKS_PATH, files=[*images, recommendations_file, guidelines_file]
+        )
+        response = client.get(f"{TASKS_PATH}/{created.json()['task_id']}/demo-debug")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == TaskStatus.completed
+    assert [image["image_id"] for image in payload["images"]] == [
+        "image_1",
+        "image_2",
+    ]
+    for image in payload["images"]:
+        generation, evaluation_debug = image["correspondence"]
+        assert [generation["step"], evaluation_debug["step"]] == [1, 1]
+        assert [generation["operation"], evaluation_debug["operation"]] == [
+            "generation",
+            "evaluation",
+        ]
+        assert generation["request_messages"] == [
+            {
+                "role": "user",
+                "text": provider_client.images.edit.await_args_list[
+                    0
+                ].kwargs["prompt"],
+            }
+        ]
+        assert generation["response_messages"] == [
+            {"role": "assistant", "text": "Provider revised the image prompt."}
+        ]
+        assert [message["role"] for message in evaluation_debug["request_messages"]] == [
+            "system",
+            "user",
+            "user",
+            "user",
+        ]
+        assert evaluation_debug["response_messages"] == [
+            {
+                "role": "assistant",
+                "text": '{"overall_pass":true,"source":"raw provider response"}',
+            }
+        ]
+    assert base64.b64encode(png_bytes).decode() not in response.text
+
+
+def test_demo_debug_is_unavailable_outside_debug_log_level(tmp_path):
+    application = create_app(config=make_test_config(tmp_path, log_level="INFO"))
+
+    with TestClient(application) as client:
+        application.state.tasks["task-id"] = TaskState(
+            task_id="task-id", status=TaskStatus.completed
+        )
+        response = client.get(f"{TASKS_PATH}/task-id/demo-debug")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Debug correspondence not available."}
 
 
 def test_application_creates_runtime_log_file(tmp_path):

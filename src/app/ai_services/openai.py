@@ -10,15 +10,83 @@ import binascii
 import io
 import json
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
 from openai import APIStatusError, AsyncOpenAI
 from PIL import Image, UnidentifiedImageError
 
-from app.schema_models import BrandGuidelines, Evaluation, Recommendation
+from app.schema_models import (
+    BrandGuidelines,
+    Evaluation,
+    OpenAITextMessage,
+    Recommendation,
+)
 
 LOGGER = logging.getLogger(__name__)
+OpenAIOperation = Literal["generation", "evaluation"]
+
+
+class OpenAIDebugRecorder(Protocol):
+    """Collect text-only request and response messages for one provider call."""
+
+    def record_request(
+        self,
+        operation: OpenAIOperation,
+        model: str,
+        messages: list[OpenAITextMessage],
+    ) -> None:
+        """Record all request text immediately before it is sent."""
+
+    def record_response(
+        self,
+        operation: OpenAIOperation,
+        messages: list[OpenAITextMessage],
+    ) -> None:
+        """Record all response text returned by the provider."""
+
+
+_ACTIVE_DEBUG_RECORDER: ContextVar[OpenAIDebugRecorder | None] = ContextVar(
+    "active_openai_debug_recorder",
+    default=None,
+)
+
+
+@contextmanager
+def capture_openai_debug(recorder: OpenAIDebugRecorder) -> Iterator[None]:
+    """Capture text correspondence for the OpenAI calls in this async context."""
+
+    token = _ACTIVE_DEBUG_RECORDER.set(recorder)
+    try:
+        yield
+    finally:
+        _ACTIVE_DEBUG_RECORDER.reset(token)
+
+
+def _record_request(
+    operation: OpenAIOperation,
+    model: str,
+    messages: list[OpenAITextMessage],
+) -> None:
+    """Send request text to an active task-scoped debug recorder, if any."""
+
+    recorder = _ACTIVE_DEBUG_RECORDER.get()
+    if recorder is not None:
+        recorder.record_request(operation, model, messages)
+
+
+def _record_response(
+    operation: OpenAIOperation,
+    messages: list[OpenAITextMessage],
+) -> None:
+    """Send response text to an active task-scoped debug recorder, if any."""
+
+    recorder = _ACTIVE_DEBUG_RECORDER.get()
+    if recorder is not None:
+        recorder.record_response(operation, messages)
 
 
 def _editing_prompt(
@@ -202,6 +270,11 @@ class OpenAIService:
             self._image_model,
             json.dumps([prompt], ensure_ascii=False),
         )
+        _record_request(
+            "generation",
+            self._image_model,
+            [OpenAITextMessage(role="user", text=prompt)],
+        )
         try:
             response = await self._client.images.edit(
                 model=self._image_model,
@@ -221,6 +294,13 @@ class OpenAIService:
         LOGGER.debug(
             "event=openai_response operation=image_edit text=%s",
             json.dumps(response_text, ensure_ascii=False),
+        )
+        _record_response(
+            "generation",
+            [
+                OpenAITextMessage(role="assistant", text=text)
+                for text in response_text
+            ],
         )
         # Treat provider output as untrusted even after a successful HTTP call.
         if not response_data or not response_data[0].b64_json:
@@ -279,6 +359,17 @@ class OpenAIService:
             json.dumps(instructions, ensure_ascii=False),
             json.dumps(input_text, ensure_ascii=False),
         )
+        _record_request(
+            "evaluation",
+            self._evaluation_model,
+            [
+                OpenAITextMessage(role="system", text=instructions),
+                *[
+                    OpenAITextMessage(role="user", text=text)
+                    for text in input_text
+                ],
+            ],
+        )
         try:
             response = await self._client.responses.parse(
                 model=self._evaluation_model,
@@ -311,8 +402,16 @@ class OpenAIService:
         except APIStatusError as error:
             _log_provider_error("evaluation", error)
             raise
-        evaluation = Evaluation.model_validate(response.output_parsed)
         response_text = getattr(response, "output_text", None)
+        _record_response(
+            "evaluation",
+            (
+                [OpenAITextMessage(role="assistant", text=response_text)]
+                if isinstance(response_text, str)
+                else []
+            ),
+        )
+        evaluation = Evaluation.model_validate(response.output_parsed)
         if response_text is None:
             response_text = evaluation.model_dump_json()
         LOGGER.debug(

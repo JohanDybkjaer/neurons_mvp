@@ -1,5 +1,11 @@
 """Public schema-model interface."""
 
+from app.schema_models.debug import (
+    ImageDemoDebug,
+    OpenAICorrespondence,
+    OpenAITextMessage,
+    TaskDemoDebug,
+)
 from app.schema_models.evaluations import (
     BrandCheck,
     Evaluation,
@@ -30,12 +36,16 @@ __all__ = [
     "CodedErrorResponse",
     "Evaluation",
     "HealthResponse",
+    "ImageDemoDebug",
     "ImageResult",
     "MAX_ITERATIONS",
     "Recommendation",
     "RecommendationCheck",
     "RecommendationFile",
     "RecommendationsDocument",
+    "OpenAICorrespondence",
+    "OpenAITextMessage",
+    "TaskDemoDebug",
     "TaskCreated",
     "TaskState",
     "TaskStatus",
