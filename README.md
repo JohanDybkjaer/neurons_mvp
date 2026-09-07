@@ -36,6 +36,8 @@ It uses the same image CI builds, and you do not need to install `uv`.
 5. Run `make docker-run` again.
 6. Open [Swagger UI](http://127.0.0.1:8000/docs).
 
+On macOS, `make docker-run-docs` starts the container in the background, waits for it to become ready, and opens Swagger UI automatically.
+
 ### Local development with uv
 
 Use this path only when changing or debugging the application.
