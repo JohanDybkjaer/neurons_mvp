@@ -192,26 +192,42 @@ class OpenAIService:
         output_format: Literal["jpeg", "png"] = (
             "jpeg" if destination_path.suffix.lower() in {".jpg", ".jpeg"} else "png"
         )
+        prompt = _editing_prompt(
+            recommendations,
+            brand_guidelines,
+            repair_feedback,
+        )
+        LOGGER.debug(
+            "event=openai_request operation=image_edit model=%s input_text=%s",
+            self._image_model,
+            json.dumps([prompt], ensure_ascii=False),
+        )
         try:
             response = await self._client.images.edit(
                 model=self._image_model,
                 image=(original_path.name, original_bytes, _media_type(original_path)),
-                prompt=_editing_prompt(
-                    recommendations,
-                    brand_guidelines,
-                    repair_feedback,
-                ),
+                prompt=prompt,
                 output_format=output_format,
             )
         except APIStatusError as error:
             _log_provider_error("image_edit", error)
             raise
+        response_data = response.data or []
+        response_text = [
+            revised_prompt
+            for image in response_data
+            if (revised_prompt := getattr(image, "revised_prompt", None)) is not None
+        ]
+        LOGGER.debug(
+            "event=openai_response operation=image_edit text=%s",
+            json.dumps(response_text, ensure_ascii=False),
+        )
         # Treat provider output as untrusted even after a successful HTTP call.
-        if not response.data or not response.data[0].b64_json:
+        if not response_data or not response_data[0].b64_json:
             raise ValueError("Image provider returned no image data")
         try:
             image_bytes = base64.b64decode(
-                response.data[0].b64_json,
+                response_data[0].b64_json,
                 validate=True,
             )
         except (binascii.Error, ValueError) as error:
@@ -250,23 +266,30 @@ class OpenAIService:
         )
         # One combined request gives every recommendation and brand check the
         # same visual context and avoids inconsistent per-criterion judgments.
+        instructions = (
+            "You are a strict visual compliance evaluator. Return only the "
+            "requested structured evaluation."
+        )
+        prompt = _evaluation_prompt(recommendations, brand_guidelines)
+        input_text = [prompt, "Original creative:", "Generated variant:"]
+        LOGGER.debug(
+            "event=openai_request operation=evaluation model=%s "
+            "instructions=%s input_text=%s",
+            self._evaluation_model,
+            json.dumps(instructions, ensure_ascii=False),
+            json.dumps(input_text, ensure_ascii=False),
+        )
         try:
             response = await self._client.responses.parse(
                 model=self._evaluation_model,
-                instructions=(
-                    "You are a strict visual compliance evaluator. Return only the "
-                    "requested structured evaluation."
-                ),
+                instructions=instructions,
                 input=[
                     {
                         "role": "user",
                         "content": [
                             {
                                 "type": "input_text",
-                                "text": _evaluation_prompt(
-                                    recommendations,
-                                    brand_guidelines,
-                                ),
+                                "text": prompt,
                             },
                             {"type": "input_text", "text": "Original creative:"},
                             {
@@ -288,4 +311,12 @@ class OpenAIService:
         except APIStatusError as error:
             _log_provider_error("evaluation", error)
             raise
-        return Evaluation.model_validate(response.output_parsed)
+        evaluation = Evaluation.model_validate(response.output_parsed)
+        response_text = getattr(response, "output_text", None)
+        if response_text is None:
+            response_text = evaluation.model_dump_json()
+        LOGGER.debug(
+            "event=openai_response operation=evaluation text=%s",
+            json.dumps(response_text, ensure_ascii=False),
+        )
+        return evaluation

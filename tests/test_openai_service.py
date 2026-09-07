@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+import json
 import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -28,7 +29,12 @@ def test_generate_variant_calls_image_edit_and_writes_result(
     destination_path = tmp_path / "variant.png"
     write_original(original_path, png_bytes)
     image_response = SimpleNamespace(
-        data=[SimpleNamespace(b64_json=base64.b64encode(png_bytes).decode())]
+        data=[
+            SimpleNamespace(
+                b64_json=base64.b64encode(png_bytes).decode(),
+                revised_prompt="Revised provider image prompt",
+            )
+        ]
     )
     client = make_client(image_response=image_response)
     service = OpenAIService(client, "image-model", "evaluation-model")
@@ -83,6 +89,44 @@ def test_generate_variant_repair_prompt_uses_only_validated_failed_checks(
     assert "Start again from the supplied original creative" in prompt
     assert feedback.recommendations[0].reason in prompt
     assert feedback.brand_checks[0].reason in prompt
+
+
+def test_generate_variant_logs_the_concrete_prompt_at_debug(
+    caplog, tmp_path, png_bytes, recommendations, brand_guidelines
+):
+    original_path = tmp_path / "original.png"
+    destination_path = tmp_path / "variant.png"
+    write_original(original_path, png_bytes)
+    image_response = SimpleNamespace(
+        data=[
+            SimpleNamespace(
+                b64_json=base64.b64encode(png_bytes).decode(),
+                revised_prompt="Revised provider image prompt",
+            )
+        ]
+    )
+    client = make_client(image_response=image_response)
+    service = OpenAIService(client, "image-model", "evaluation-model")
+
+    with caplog.at_level(logging.DEBUG, logger="app.ai_services.openai"):
+        asyncio.run(
+            service.generate_variant(
+                original_path,
+                destination_path,
+                recommendations,
+                brand_guidelines,
+            )
+        )
+
+    prompt = client.images.edit.await_args.kwargs["prompt"]
+    assert (
+        f"event=openai_request operation=image_edit model=image-model "
+        f"input_text={json.dumps([prompt], ensure_ascii=False)}"
+    ) in caplog.messages
+    assert (
+        "event=openai_response operation=image_edit "
+        'text=["Revised provider image prompt"]'
+    ) in caplog.messages
 
 
 def test_generate_variant_rejects_non_image_provider_bytes(
@@ -157,7 +201,12 @@ def test_evaluate_variant_sends_both_images_and_all_criteria_once(
     write_original(original_path, png_bytes)
     write_original(variant_path, png_bytes)
     evaluation = make_evaluation(recommendations, brand_guidelines, True)
-    client = make_client(evaluation_response=SimpleNamespace(output_parsed=evaluation))
+    client = make_client(
+        evaluation_response=SimpleNamespace(
+            output_parsed=evaluation,
+            output_text='{"overall_pass": true}',
+        )
+    )
     service = OpenAIService(client, "image-model", "evaluation-model")
 
     result = asyncio.run(
@@ -183,6 +232,46 @@ def test_evaluate_variant_sends_both_images_and_all_criteria_once(
     prompt = "\n".join(part["text"] for part in content if part["type"] == "input_text")
     assert all(item.id in prompt for item in recommendations)
     assert all(criterion in prompt for criterion in brand_guidelines.criteria())
+
+
+def test_evaluate_variant_logs_the_concrete_prompt_at_debug(
+    caplog, tmp_path, png_bytes, recommendations, brand_guidelines
+):
+    original_path = tmp_path / "original.png"
+    variant_path = tmp_path / "variant.png"
+    write_original(original_path, png_bytes)
+    write_original(variant_path, png_bytes)
+    evaluation = make_evaluation(recommendations, brand_guidelines, True)
+    client = make_client(
+        evaluation_response=SimpleNamespace(
+            output_parsed=evaluation,
+            output_text='{"overall_pass": true}',
+        )
+    )
+    service = OpenAIService(client, "image-model", "evaluation-model")
+
+    with caplog.at_level(logging.DEBUG, logger="app.ai_services.openai"):
+        asyncio.run(
+            service.evaluate_variant(
+                original_path,
+                variant_path,
+                recommendations,
+                brand_guidelines,
+            )
+        )
+
+    call = client.responses.parse.await_args.kwargs
+    prompt = call["input"][0]["content"][0]["text"]
+    instructions = call["instructions"]
+    assert (
+        f"event=openai_request operation=evaluation model=evaluation-model "
+        f"instructions={json.dumps(instructions, ensure_ascii=False)} "
+        f"input_text={json.dumps([prompt, 'Original creative:', 'Generated variant:'], ensure_ascii=False)}"
+    ) in caplog.messages
+    assert (
+        "event=openai_response operation=evaluation "
+        'text="{\\"overall_pass\\": true}"'
+    ) in caplog.messages
 
 
 def test_malformed_evaluator_output_is_rejected(
